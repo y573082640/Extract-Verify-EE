@@ -1,0 +1,26 @@
+{
+    "text": "雀巢裁员4000人：时代抛弃你时，连招呼都不会打！",
+    "id": "409389c96efe78d6af1c86e0450fd2d7",
+    "event_list": [
+        {
+            "event_type": "组织关系-裁员",
+            "trigger": "裁员",
+            "trigger_start_index": 2,
+            "arguments": [
+                {
+                    "argument_start_index": 0,
+                    "role": "裁员方",
+                    "argument": "雀巢",
+                    "alias": []
+                },
+                {
+                    "argument_start_index": 4,
+                    "role": "裁员人数",
+                    "argument": "4000人",
+                    "alias": []
+                }
+            ],
+            "class": "组织关系"
+        }
+    ]
+}

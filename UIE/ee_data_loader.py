@@ -2,7 +2,7 @@ import json
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
-
+from utils.question_maker import Question_maker
 
 class ListDataset(Dataset):
     def __init__(self,
@@ -80,6 +80,7 @@ class EeDataset(ListDataset):
                   }
                   ner_data.append(event_data)
                 elif "obj" in tasks:
+                  question_maker = Question_maker()
                   for event in event_list:
                     event_type = event["event_type"]
                     trigger = event["trigger"]
@@ -88,7 +89,8 @@ class EeDataset(ListDataset):
                     for argument in arguments:
                       argument_start_index = argument["argument_start_index"]
                       role = argument["role"]
-                      pre_tokens = [i for i in event_type + "_" + role] + ['[SEP]']
+                      question = question_maker.get_question_for_argument(event_type=event_type,role=role)
+                      pre_tokens = [i for i in question] + ['[SEP]']
                       argu = argument["argument"]
                       if len(text) + len(pre_tokens) > max_len - 2:
                         argu_token = (pre_tokens + [i for i in text])[:max_len-2]
@@ -244,7 +246,7 @@ if __name__ == "__main__":
                               entity_label=entity_label,
                               tasks=tasks)
 
-    print(len(train_dataset))
+    print(train_dataset[:5])
     # for k, v in train_dataset[0].items():
     #     print(k, v)
 
