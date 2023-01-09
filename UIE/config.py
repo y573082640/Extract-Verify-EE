@@ -2,7 +2,7 @@ import torch
 from transformers import BertTokenizer
 
 class EeArgs:
-    tasks = ["ner"]
+    tasks = ["obj"]
     data_name = "duee"
     data_dir = "ee"
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
@@ -68,7 +68,7 @@ class NerArgs:
 
 
 class ReArgs:
-    tasks = ["ner"]
+    tasks = ["obj"]
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
     data_name = "ske"
     save_dir = "./checkpoints/re/{}_{}_model.pt".format(tasks[0], data_name)

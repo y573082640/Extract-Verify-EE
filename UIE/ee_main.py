@@ -426,7 +426,7 @@ class EePipeline:
         self.model.to(self.args.device)
         with torch.no_grad():
             if "ner" in self.args.tasks:
-              tokens_b = [i for i in textb]
+              tokens_b = [i for i in textb] # TODO:此处的tokens为单字，考虑引入更多分词方法
               encode_dict = self.args.tokenizer.encode_plus(text=tokens_b,
                                       max_length=self.args.max_seq_len,
                                       padding="max_length",
@@ -448,6 +448,7 @@ class EePipeline:
               pred_entities = ner_decode(start_logits, end_logits, textb, self.args.ent_id2label)
               return dict(pred_entities)
 
+            # tokens = ['[CLS]'] + tokens + ['[SEP]'] + tokens + + ['[SEP]']
             elif "obj" in self.args.tasks:
               tokens = [i for i in texta] + ['[SEP]'] + [i for i in textb]
               ori_tokens = tokens
@@ -492,7 +493,7 @@ if __name__ == '__main__':
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
 
-    # ee_pipeline.train()
+    ee_pipeline.train()
     ee_pipeline.test()
 
     ee_pipeline.load_model()

@@ -237,7 +237,7 @@ if __name__ == "__main__":
 
 
     print(entity_label)
-    tasks = ["ner"]
+    tasks = ["obj"]
     train_dataset = EeDataset(file_path='data/ee/duee/duee_train.json',
                               tokenizer=tokenizer,
                               max_len=max_seq_len,

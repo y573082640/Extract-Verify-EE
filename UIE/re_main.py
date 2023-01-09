@@ -664,8 +664,8 @@ if __name__ == '__main__':
     model = UIEModel(args)
     re_pipeline = RePipeline(model, args)
 
-    # re_pipeline.train()
-    # re_pipeline.test()
+    re_pipeline.train()
+    re_pipeline.test()
 
     re_pipeline.load_model()
     if "ner" in args.tasks:
