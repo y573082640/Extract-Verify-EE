@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from utils.question_maker import Question_maker
+from sentence_transformers import SentenceTransformer, util
 
 class ListDataset(Dataset):
     def __init__(self,
@@ -34,11 +35,14 @@ class ListDataset(Dataset):
 
 # 加载实体识别数据集
 class EeDataset(ListDataset):
+
     @staticmethod
-    def load_data(filename, tokenizer, max_len, entity_label=None, tasks=None):
+    def load_data(filename, tokenizer, max_len, entity_label=None, tasks=None, sim_model='sentence-transformers/paraphrase-MiniLM-L6-v2', ):
         ner_data = []
         obj_data = []
         ent_label2id = {label: i for i, label in enumerate(entity_label)}
+        question_maker = Question_maker(sim_model=sim_model,demo_file='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/toy.json')
+
         with open(filename, encoding='utf-8') as f:
             f = f.read().strip().split("\n")
             for d in f:
@@ -80,7 +84,6 @@ class EeDataset(ListDataset):
                   }
                   ner_data.append(event_data)
                 elif "obj" in tasks:
-                  question_maker = Question_maker()
                   for event in event_list:
                     event_type = event["event_type"]
                     trigger = event["trigger"]
@@ -89,9 +92,13 @@ class EeDataset(ListDataset):
                     for argument in arguments:
                       argument_start_index = argument["argument_start_index"]
                       role = argument["role"]
-                      question = question_maker.get_question_for_argument(event_type=event_type,role=role)
-                      pre_tokens = [i for i in question] + ['[SEP]']
                       argu = argument["argument"]
+                      question = question_maker.get_question_for_argument(event_type=event_type,role=role)
+                      # 搜索最近邻部分
+                      sim_context, sim_question, sim_ans = question_maker.semantic_search(text,question,trigger)
+                      demo = ['[DEMO]'] + [i for i in sim_question]  + ['[SEP]'] + [i for i in sim_context] + ['[SEP]','[ARG]'] + [i for i in sim_ans] + ['[DEMO]']
+                      pre_tokens = demo + [i for i in question] + ['[SEP]']
+                      
                       if len(text) + len(pre_tokens) > max_len - 2:
                         argu_token = (pre_tokens + [i for i in text])[:max_len-2]
                       else:
@@ -105,13 +112,14 @@ class EeDataset(ListDataset):
                         continue
                       argu_start_labels[argu_start] = 1
                       argu_end_labels[argu_end] = 1
-                     
+                   
                       argu_data = {
+                        'event_id' : d['id'],
                         "obj_tokens": argu_token,
                         "obj_start_labels": argu_start_labels,
                         "obj_end_labels": argu_end_labels,
                       }
-  
+
                       obj_data.append(argu_data)
 
         return ner_data if "ner" in tasks else obj_data
@@ -129,7 +137,7 @@ class EeCollate:
         self.maxlen = max_len
         self.tokenizer = tokenizer
         self.tasks = tasks
-
+        
     def collate_fn(self, batch):
         batch_ner_token_ids = []
         batch_ner_attention_mask = []
@@ -230,7 +238,7 @@ if __name__ == "__main__":
     from transformers import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained('model_hub/chinese-bert-wwm-ext')
-
+    tokenizer.add_special_tokens({'additional_special_tokens':['[DEMO]','[ARG]','[TGR]']})
     # 测试实体识别
     # ============================
     max_seq_len = 256

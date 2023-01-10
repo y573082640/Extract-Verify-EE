@@ -32,6 +32,8 @@ class EeArgs:
     warmup_proportion = 0.01
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = BertTokenizer.from_pretrained(bert_dir)
+    tokenizer.add_special_tokens({'additional_special_tokens':['[DEMO]','[ARG]','[TGR]']})
+
 
 
 class NerArgs:
