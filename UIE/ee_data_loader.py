@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from utils.question_maker import Question_maker
 from sentence_transformers import SentenceTransformer, util
-
+import time
 class ListDataset(Dataset):
     def __init__(self,
                  file_path=None,
@@ -41,7 +41,7 @@ class EeDataset(ListDataset):
         ner_data = []
         obj_data = []
         ent_label2id = {label: i for i, label in enumerate(entity_label)}
-        question_maker = Question_maker(sim_model=sim_model,demo_file='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/toy.json')
+        question_maker = Question_maker(sim_model=sim_model,demo_file=filename)
 
         with open(filename, encoding='utf-8') as f:
             f = f.read().strip().split("\n")
