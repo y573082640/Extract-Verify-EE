@@ -14,7 +14,6 @@ from UIE.ee_data_loader import EeDataset, EeCollate
 from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
 from UIE.utils.metrics import calculate_metric, classification_report, get_p_r_f
 
-
 class EePipeline:
     def __init__(self, model, args):
         self.model = model

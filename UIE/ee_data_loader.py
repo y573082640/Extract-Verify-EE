@@ -2,7 +2,7 @@ import json
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
-from utils.question_maker import Question_maker
+from utils.question_maker import Sim_scorer
 from sentence_transformers import SentenceTransformer, util
 import time
 class ListDataset(Dataset):
@@ -37,22 +37,21 @@ class ListDataset(Dataset):
 class EeDataset(ListDataset):
 
     @staticmethod
-    def load_data(filename, tokenizer, max_len, entity_label=None, tasks=None, sim_model='sentence-transformers/paraphrase-MiniLM-L6-v2', ):
+    def load_data(filename, tokenizer, max_len, entity_label=None, tasks=None, sim_model='model_hub/paraphrase-MiniLM-L6-v2', ):
         ner_data = []
         obj_data = []
         ent_label2id = {label: i for i, label in enumerate(entity_label)}
-        question_maker = Question_maker(sim_model=sim_model,demo_file=filename)
+        sim_scorer = Sim_scorer(sim_model)
+        if "ner" in tasks:
+          with open(filename, encoding='utf-8') as f:
+              f = f.read().strip().split("\n")
+              for d in f:
+                  d = json.loads(d)
+                  text = d["text"]
+                  event_list = d["event_list"]
+                  if len(text) == 0:
+                      continue
 
-        with open(filename, encoding='utf-8') as f:
-            f = f.read().strip().split("\n")
-            for d in f:
-                d = json.loads(d)
-                text = d["text"]
-                event_list = d["event_list"]
-                if len(text) == 0:
-                    continue
-                
-                if "ner" in tasks:
                   event_start_labels = np.zeros((len(ent_label2id), max_len))
                   event_end_labels = np.zeros((len(ent_label2id), max_len))
 
@@ -83,44 +82,90 @@ class EeDataset(ListDataset):
                       "ner_end_labels": event_end_labels,
                   }
                   ner_data.append(event_data)
-                elif "obj" in tasks:
-                  for event in event_list:
-                    event_type = event["event_type"]
-                    trigger = event["trigger"]
-                    trigger_start_index = event["trigger_start_index"]
-                    arguments = event["arguments"]
-                    for argument in arguments:
-                      argument_start_index = argument["argument_start_index"]
-                      role = argument["role"]
-                      argu = argument["argument"]
-                      question = question_maker.get_question_for_argument(event_type=event_type,role=role)
-                      # 搜索最近邻部分
-                      sim_context, sim_question, sim_ans = question_maker.semantic_search(text,question,trigger)
-                      demo = ['[DEMO]'] + [i for i in sim_question]  + ['[SEP]'] + [i for i in sim_context] + ['[SEP]','[ARG]'] + [i for i in sim_ans] + ['[DEMO]']
-                      pre_tokens = demo + [i for i in question] + ['[SEP]']
-                      
-                      if len(text) + len(pre_tokens) > max_len - 2:
-                        argu_token = (pre_tokens + [i for i in text])[:max_len-2]
-                      else:
-                        argu_token = pre_tokens + [i for i in text]
-                      argu_token = ['[CLS]'] + argu_token + ['[SEP]']
-                      argu_start_labels = [0] * len(argu_token)
-                      argu_end_labels = [0] * len(argu_token)
-                      argu_start = len(pre_tokens) + 1 + argument_start_index
-                      argu_end = argu_start + len(argu) - 1
-                      if argu_end >= max_len - 1:
-                        continue
-                      argu_start_labels[argu_start] = 1
-                      argu_end_labels[argu_end] = 1
-                   
-                      argu_data = {
-                        'event_id' : d['id'],
-                        "obj_tokens": argu_token,
-                        "obj_start_labels": argu_start_labels,
-                        "obj_end_labels": argu_end_labels,
-                      }
+        elif "obj" in tasks:
+          print('...构造文本embedding')
+          embs, tuples = sim_scorer.create_embs_and_tuples(filename)
+          print('文本embedding构造完毕')
+          # 此处用训练集作为demo库
+          print('...构造提示库embedding')
+          demo_embs, demo_tuples = sim_scorer.create_embs_and_tuples('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_train.json') 
+          print('提示库embedding构造完毕')
+          most_sim = sim_scorer.sim_match(embs,demo_embs) # {corpus_id,score}
+          print('相似度匹配完成')            
+          for idx,text_tuple in enumerate(tuples):
+              sim_id = most_sim[idx]['corpus_id']
+              sim_tuple = demo_tuples[sim_id]
+              demo = ['[DEMO]'] + [i for i in sim_tuple['question']]  + ['[SEP]'] + [i for i in sim_tuple['text']] + ['[SEP]','[ARG]'] + [i for i in sim_tuple['argument']] + ['[DEMO]']
+              
+              question = text_tuple['question']
+              text = text_tuple['text']
+              argument_start_index = text_tuple['argument_start_index']
+              argu = text_tuple["argument"]
 
-                      obj_data.append(argu_data)
+              pre_tokens = demo + [i for i in question] + ['[SEP]']
+              
+              if len(text) + len(pre_tokens) > max_len - 2:
+                argu_token = (pre_tokens + [i for i in text])[:max_len-2]
+              else:
+                argu_token = pre_tokens + [i for i in text]
+              argu_token = ['[CLS]'] + argu_token + ['[SEP]']
+              argu_start_labels = [0] * len(argu_token)
+              argu_end_labels = [0] * len(argu_token)
+              argu_start = len(pre_tokens) + 1 + argument_start_index
+              argu_end = argu_start + len(argu) - 1
+              if argu_end >= max_len - 1:
+                continue
+              argu_start_labels[argu_start] = 1
+              argu_end_labels[argu_end] = 1
+            
+              argu_data = {
+                "obj_tokens": argu_token,
+                "obj_start_labels": argu_start_labels,
+                "obj_end_labels": argu_end_labels,
+              }
+
+              obj_data.append(argu_data)
+          
+
+          # for event in event_list:
+          #   event_type = event["event_type"]
+          #   trigger = event["trigger"]
+          #   trigger_start_index = event["trigger_start_index"]
+          #   arguments = event["arguments"]
+          #   for argument in arguments:
+          #     argument_start_index = argument["argument_start_index"]
+          #     role = argument["role"]
+          #     argu = argument["argument"]
+          #     question = question_maker.get_question_for_argument(event_type=event_type,role=role)
+          #     # 搜索最近邻部分
+          #     sim_context, sim_question, sim_ans = question_maker.semantic_search(text,question,trigger)
+          #     demo = ['[DEMO]'] + [i for i in sim_question]  + ['[SEP]'] + [i for i in sim_context] + ['[SEP]','[ARG]'] + [i for i in sim_ans] + ['[DEMO]']
+          #     pre_tokens = demo + [i for i in question] + ['[SEP]']
+              
+          #     if len(text) + len(pre_tokens) > max_len - 2:
+          #       argu_token = (pre_tokens + [i for i in text])[:max_len-2]
+          #     else:
+          #       argu_token = pre_tokens + [i for i in text]
+          #     argu_token = ['[CLS]'] + argu_token + ['[SEP]']
+          #     argu_start_labels = [0] * len(argu_token)
+          #     argu_end_labels = [0] * len(argu_token)
+          #     argu_start = len(pre_tokens) + 1 + argument_start_index
+          #     argu_end = argu_start + len(argu) - 1
+          #     if argu_end >= max_len - 1:
+          #       continue
+          #     argu_start_labels[argu_start] = 1
+          #     argu_end_labels[argu_end] = 1
+            
+          #     argu_data = {
+          #       'event_id' : d['id'],
+          #       "obj_tokens": argu_token,
+          #       "obj_start_labels": argu_start_labels,
+          #       "obj_end_labels": argu_end_labels,
+          #     }
+
+          #     obj_data.append(argu_data)
+
+        print('数据集构建完成')   
 
         return ner_data if "ner" in tasks else obj_data
 

@@ -12,6 +12,8 @@ class UIEModel(nn.Module):
         bert_dir = args.bert_dir
         self.bert_config = BertConfig.from_pretrained(bert_dir)
         self.bert_model = BertModel.from_pretrained(bert_dir)
+        #TODO: 保存tokenizer到本地
+        self.bert_model.resize_token_embeddings(len(args.tokenizer))
 
         if "ner" in args.tasks:
             self.ner_num_labels = args.ner_num_labels
