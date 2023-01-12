@@ -19,7 +19,7 @@ class EeArgs:
         ent_label2id[label] = i
         ent_id2label[i] = label
     ner_num_labels = len(entity_label)
-    train_epoch = 2
+    train_epoch = 20
     train_batch_size = 32
     eval_batch_size = 32
     eval_step = 500

@@ -93,31 +93,69 @@ class EeDataset(ListDataset):
           most_sim = sim_scorer.sim_match(embs,demo_embs) # {corpus_id,score}
           print('相似度匹配完成')            
           for idx,text_tuple in enumerate(tuples):
+              # 从sim_tuple中提取相关信息，并插入特殊占位符，包括[TGR]，[ARG]，[DEMO]
               sim_id = most_sim[idx]['corpus_id']
               sim_tuple = demo_tuples[sim_id]
-              demo = ['[DEMO]'] + [i for i in sim_tuple['question']]  + ['[SEP]'] + [i for i in sim_tuple['text']] + ['[SEP]','[ARG]'] + [i for i in sim_tuple['argument']] + ['[DEMO]']
+              sim_trigger = sim_tuple['trigger']
+              sim_trigger_start_index = sim_tuple['trigger_start_index']
+              sim_text_tokens = [i for i in sim_tuple['text']]
+              sim_text_tokens.insert(sim_trigger_start_index,'[TGR]')
+              sim_text_tokens.insert(sim_trigger_start_index + 1 + len(sim_trigger),'[TGR]')
+              demo = ['[DEMO]'] + [i for i in sim_tuple['question']]  + ['[SEP]'] + sim_text_tokens + ['[SEP]','[ARG]'] + [i for i in sim_tuple['argument']] + ['[DEMO]']
+
+              
               
               question = text_tuple['question']
               text = text_tuple['text']
-              argument_start_index = text_tuple['argument_start_index']
-              argu = text_tuple["argument"]
+
+              # 从text_tuple中提取相关信息，并插入特殊占位符[TGR]
+              trigger = text_tuple["trigger"]
+              trigger_start_index = text_tuple['trigger_start_index']
+              text_tokens = [i for i in text]
+              # 用于增加对arg的偏置
+              tgr1_index = trigger_start_index
+              tgr2_index = trigger_start_index + 1 + len(trigger)
+              text_tokens.insert(tgr1_index,'[TGR]')
+              text_tokens.insert(tgr2_index,'[TGR]')
 
               pre_tokens = demo + [i for i in question] + ['[SEP]']
               
-              if len(text) + len(pre_tokens) > max_len - 2:
-                argu_token = (pre_tokens + [i for i in text])[:max_len-2]
+              argu = text_tuple["argument"]
+              argument_start_index = text_tuple['argument_start_index']
+              if len(text_tokens) + len(pre_tokens) > max_len - 2:
+                argu_token = (pre_tokens + text_tokens)[:max_len-2]
               else:
-                argu_token = pre_tokens + [i for i in text]
+                argu_token = pre_tokens + text_tokens
               argu_token = ['[CLS]'] + argu_token + ['[SEP]']
               argu_start_labels = [0] * len(argu_token)
               argu_end_labels = [0] * len(argu_token)
+
+              # 因为text中多加了[TGR]
               argu_start = len(pre_tokens) + 1 + argument_start_index
               argu_end = argu_start + len(argu) - 1
+
+              tmp = 0
+              if tgr1_index < argu_start:
+                tmp += 1
+              if tgr2_index < argu_start:
+                tmp += 1
+              
+              argu_start += tmp
+
+              tmp = 0
+              if tgr1_index < argu_end:
+                tmp += 1
+              if tgr2_index < argu_end:
+                tmp += 1
+              
+              argu_end += tmp
+              
               if argu_end >= max_len - 1:
                 continue
+
               argu_start_labels[argu_start] = 1
               argu_end_labels[argu_end] = 1
-            
+
               argu_data = {
                 "obj_tokens": argu_token,
                 "obj_start_labels": argu_start_labels,
@@ -125,47 +163,9 @@ class EeDataset(ListDataset):
               }
 
               obj_data.append(argu_data)
-          
-
-          # for event in event_list:
-          #   event_type = event["event_type"]
-          #   trigger = event["trigger"]
-          #   trigger_start_index = event["trigger_start_index"]
-          #   arguments = event["arguments"]
-          #   for argument in arguments:
-          #     argument_start_index = argument["argument_start_index"]
-          #     role = argument["role"]
-          #     argu = argument["argument"]
-          #     question = question_maker.get_question_for_argument(event_type=event_type,role=role)
-          #     # 搜索最近邻部分
-          #     sim_context, sim_question, sim_ans = question_maker.semantic_search(text,question,trigger)
-          #     demo = ['[DEMO]'] + [i for i in sim_question]  + ['[SEP]'] + [i for i in sim_context] + ['[SEP]','[ARG]'] + [i for i in sim_ans] + ['[DEMO]']
-          #     pre_tokens = demo + [i for i in question] + ['[SEP]']
-              
-          #     if len(text) + len(pre_tokens) > max_len - 2:
-          #       argu_token = (pre_tokens + [i for i in text])[:max_len-2]
-          #     else:
-          #       argu_token = pre_tokens + [i for i in text]
-          #     argu_token = ['[CLS]'] + argu_token + ['[SEP]']
-          #     argu_start_labels = [0] * len(argu_token)
-          #     argu_end_labels = [0] * len(argu_token)
-          #     argu_start = len(pre_tokens) + 1 + argument_start_index
-          #     argu_end = argu_start + len(argu) - 1
-          #     if argu_end >= max_len - 1:
-          #       continue
-          #     argu_start_labels[argu_start] = 1
-          #     argu_end_labels[argu_end] = 1
-            
-          #     argu_data = {
-          #       'event_id' : d['id'],
-          #       "obj_tokens": argu_token,
-          #       "obj_start_labels": argu_start_labels,
-          #       "obj_end_labels": argu_end_labels,
-          #     }
-
-          #     obj_data.append(argu_data)
 
         print('数据集构建完成')   
+        print(obj_data[:5]) 
 
         return ner_data if "ner" in tasks else obj_data
 
