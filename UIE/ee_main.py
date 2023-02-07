@@ -1,6 +1,7 @@
 import sys
 
 sys.path.append('..')
+import time
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler
@@ -74,13 +75,15 @@ class EePipeline:
               return_report=False):
         """主体或客体"""
         s_logits, e_logits = None, None
+        raw_tokens = []
         masks = None
         start_labels = None
         end_labels = None
         self.model.eval()
         for eval_step, batch_data in enumerate(data_loader):
             for key in batch_data.keys():
-                batch_data[key] = batch_data[key].to(self.args.device)
+                if key not in self.args.ignore_key:
+                    batch_data[key] = batch_data[key].to(self.args.device)
             if "sbj" in self.args.tasks:
               output = self.model(re_sbj_input_ids=batch_data["re_sbj_input_ids"],
                           re_sbj_token_type_ids=batch_data["re_sbj_token_type_ids"],
@@ -121,6 +124,8 @@ class EePipeline:
                 masks = np.append(masks, tmp_mask, axis=0)
                 start_labels = np.append(start_labels, tmp_start_labels, axis=0)
                 end_labels = np.append(end_labels, tmp_end_labels, axis=0)
+            
+            raw_tokens += batch_data['raw_tokens']
 
         bj_outputs = {
             "s_logits": s_logits,
@@ -128,6 +133,7 @@ class EePipeline:
             "masks": masks,
             "start_labels": start_labels,
             "end_labels": end_labels,
+            'raw_tokens':raw_tokens
         }
 
         metrics = {}
@@ -148,13 +154,15 @@ class EePipeline:
             id2label,
             return_report=False):
         ner_s_logits, ner_e_logits = [], []
+        raw_tokens = []
         ner_masks = None
         ner_start_labels = None
         ner_end_labels = None
         self.model.eval()
         for eval_step, batch_data in enumerate(data_loader):
             for key in batch_data.keys():
-                batch_data[key] = batch_data[key].to(self.args.device)
+                if key not in self.args.ignore_key:
+                    batch_data[key] = batch_data[key].to(self.args.device)
             output = self.model(ner_input_ids=batch_data["ner_input_ids"],
                         ner_token_type_ids=batch_data["ner_token_type_ids"],
                         ner_attention_mask=batch_data["ner_attention_mask"],
@@ -168,6 +176,8 @@ class EePipeline:
             for i in range(batch_size):
                 ner_s_logits.append([logit[i, :] for logit in ner_start_logits])
                 ner_e_logits.append([logit[i, :] for logit in ner_end_logits])
+            
+            raw_tokens += batch_data['raw_tokens']
 
             tmp_ner_mask = batch_data["ner_attention_mask"].detach().cpu()
             tmp_ner_start_labels = batch_data["ner_start_labels"].detach().cpu()
@@ -190,6 +200,7 @@ class EePipeline:
             "ner_masks": ner_masks,
             "ner_start_labels": ner_start_labels,
             "ner_end_labels": ner_end_labels,
+            'raw_tokens':raw_tokens
         }
 
         metrics = {}
@@ -230,7 +241,10 @@ class EePipeline:
         s_label = outputs["start_labels"]
         e_label = outputs["end_labels"]
         masks = outputs["masks"]
-        for s_logit, e_logit, s_label, e_label, mask in zip(s_logits, e_logits, s_label, e_label, masks):
+        raw_tokens = outputs["raw_tokens"]
+        with open('log/argu_badcase.txt', 'w') as file_object:
+            file_object.write(str(time.time()) + "\n")
+        for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):
             length = sum(mask)
             pred_entities = bj_decode(s_logit, e_logit, length, id2label)
             true_entities = bj_decode(s_label, e_label, length, id2label)
@@ -238,6 +252,23 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
+            if str(pred_entities) != str(true_entities):
+                with open('log/argu_badcase.txt', 'a') as file_object:
+                    file_object.write("========================" + "\n")
+                    file_object.write(''.join(text) + "\n")
+                    file_object.write('真实' + "\n")
+                    for key in true_entities.keys():
+                        if len(true_entities[key]) > 0:
+                            for s_t_tuple in true_entities[key]:
+                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')        
+
+                    file_object.write('预测' + "\n")                  
+                    for key in pred_entities.keys():
+                        if len(pred_entities[key]) > 0:
+                            for s_t_tuple in pred_entities[key]:
+                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')       
+                    file_object.write("========================" + "\n")
+
             for idx, _type in enumerate(list(id2label.values())):
                 if _type not in pred_entities:
                     pred_entities[_type] = []
@@ -273,7 +304,10 @@ class EePipeline:
         s_label = ner_outputs["ner_start_labels"]
         e_label = ner_outputs["ner_end_labels"]
         masks = ner_outputs["ner_masks"]
-        for s_logit, e_logit, s_label, e_label, mask in zip(s_logits, e_logits, s_label, e_label, masks):
+        raw_tokens = ner_outputs["raw_tokens"]
+        with open('log/trigger_badcase.txt', 'w') as file_object:
+            file_object.write(str(time.time()) + "\n")
+        for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):
             length = sum(mask)
             pred_entities = ner_decode2(s_logit, e_logit, length, self.args.ent_id2label)
             true_entities = ner_decode2(s_label, e_label, length, self.args.ent_id2label)
@@ -281,6 +315,22 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
+            if str(pred_entities) != str(true_entities):
+                with open('log/trigger_badcase.txt', 'a') as file_object:
+                    file_object.write("========================" + "\n")
+                    file_object.write(''.join(text) + "\n")
+                    file_object.write('真实' + "\n")
+                    for key in true_entities.keys():
+                        if len(true_entities[key]) > 0:
+                            for s_t_tuple in true_entities[key]:
+                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')        
+
+                    file_object.write('预测' + "\n")                  
+                    for key in pred_entities.keys():
+                        if len(pred_entities[key]) > 0:
+                            for s_t_tuple in pred_entities[key]:
+                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')       
+            
             for idx, _type in enumerate(self.args.entity_label):
                 if _type not in pred_entities:
                     pred_entities[_type] = []
@@ -300,7 +350,6 @@ class EePipeline:
         train_loader = DataLoader(dataset=train_dataset,
                                   batch_size=self.args.train_batch_size,
                                   sampler=train_sampler,
-                                  num_workers=2,
                                   collate_fn=collate.collate_fn)
         dev_loader = None
         dev_callback = None
@@ -314,7 +363,6 @@ class EePipeline:
             dev_loader = DataLoader(dataset=dev_dataset,
                                     batch_size=self.args.eval_batch_size,
                                     shuffle=False,
-                                    num_workers=2,
                                     collate_fn=collate.collate_fn)
 
         t_total = len(train_loader) * self.args.train_epoch
@@ -329,7 +377,8 @@ class EePipeline:
             for step, batch_data in enumerate(train_loader):
                 self.model.train()
                 for key in batch_data.keys():
-                    batch_data[key] = batch_data[key].to(self.args.device)
+                    if key not in self.args.ignore_key:
+                        batch_data[key] = batch_data[key].to(self.args.device)
                 if "ner" in self.args.tasks:
                   output = self.model(ner_input_ids=batch_data["ner_input_ids"],
                             ner_token_type_ids=batch_data["ner_token_type_ids"],
@@ -395,7 +444,6 @@ class EePipeline:
         test_loader = DataLoader(dataset=test_dataset,
                           batch_size=self.args.eval_batch_size,
                           shuffle=False,
-                          num_workers=2,
                           collate_fn=collate.collate_fn)
         self.load_model()
         self.model.to(self.args.device)
@@ -492,18 +540,18 @@ if __name__ == '__main__':
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
 
-    ee_pipeline.train()
+    # ee_pipeline.train()
     ee_pipeline.test()
 
-    ee_pipeline.load_model()
-    if "ner" in args.tasks:
-      raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-      print(raw_text)
-      print(ee_pipeline.predict(raw_text))
-    elif "obj" in args.tasks:
-      textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-      texta = "组织关系-裁员_裁员人数"
-      texta = "组织关系-裁员_裁员方"
-      print(textb)
-      print(texta)
-      print(ee_pipeline.predict(textb, texta))
+    # ee_pipeline.load_model()
+    # if "ner" in args.tasks:
+    #   raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+    #   print(raw_text)
+    #   print(ee_pipeline.predict(raw_text))
+    # elif "obj" in args.tasks:
+    #   textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+    #   texta = "组织关系-裁员_裁员人数"
+    #   texta = "组织关系-裁员_裁员方"
+    #   print(textb)
+    #   print(texta)
+    #   print(ee_pipeline.predict(textb, texta))

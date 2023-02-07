@@ -6,11 +6,12 @@ class EeArgs:
     data_name = "duee"
     data_dir = "ee"
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
-    save_dir = "./checkpoints/{}/{}_{}_model.pt".format(data_dir, tasks[0], data_name)
+    save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(data_dir, tasks[0], data_name)
     train_path = "./data/{}/{}/duee_train.json".format(data_dir, data_name)
     dev_path = "./data/{}/{}/duee_dev.json".format(data_dir, data_name)
     test_path = "./data/{}/{}/duee_dev.json".format(data_dir, data_name)
     label_path = "./data/{}/{}/labels.txt".format(data_dir, data_name)
+    ignore_key = ['raw_tokens']
     with open(label_path, "r") as fp:
         entity_label = fp.read().strip().split("\n")
     ent_label2id = {}

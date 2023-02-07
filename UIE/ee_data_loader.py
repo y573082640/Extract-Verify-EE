@@ -130,7 +130,7 @@ class EeDataset(ListDataset):
               argu_start_labels = [0] * len(argu_token)
               argu_end_labels = [0] * len(argu_token)
 
-              # 因为text中多加了[TGR]
+              # 因为text中多加了[TGR]--[CLS]
               argu_start = len(pre_tokens) + 1 + argument_start_index
               argu_end = argu_start + len(argu) - 1
 
@@ -165,7 +165,7 @@ class EeDataset(ListDataset):
               obj_data.append(argu_data)
 
         print('数据集构建完成')   
-        print(obj_data[:5]) 
+        # print(obj_data[:5]) 
 
         return ner_data if "ner" in tasks else obj_data
 
@@ -185,7 +185,8 @@ class EeCollate:
         
     def collate_fn(self, batch):
         batch_ner_token_ids = []
-        batch_ner_attention_mask = []
+        batch_raw_tokens = [] # 用于bad-case分析时获取结果
+        batch_ner_attention_mask = [] 
         batch_ner_token_type_ids = []
         batch_ner_start_labels = []
         batch_ner_end_labels = []
@@ -199,6 +200,7 @@ class EeCollate:
             if "ner" in self.tasks:
               ner_token_type_ids = [0] * self.maxlen
               ner_tokens = data["ner_tokens"]
+              raw_tokens = ner_tokens
               ner_tokens = self.tokenizer.convert_tokens_to_ids(ner_tokens)
               ner_start_labels = data["ner_start_labels"]
               ner_end_labels = data["ner_end_labels"]
@@ -214,10 +216,12 @@ class EeCollate:
               batch_ner_token_type_ids.append(ner_token_type_ids)
               batch_ner_start_labels.append(ner_start_labels)
               batch_ner_end_labels.append(ner_end_labels)
+              batch_raw_tokens.append(raw_tokens)
 
 
             elif "obj" in self.tasks:
               obj_tokens = data["obj_tokens"]
+              raw_tokens = obj_tokens
               obj_tokens = self.tokenizer.convert_tokens_to_ids(obj_tokens)
               obj_start_labels = data["obj_start_labels"]
               obj_end_labels = data["obj_end_labels"]
@@ -237,6 +241,7 @@ class EeCollate:
               batch_obj_token_type_ids.append(obj_token_type_ids)
               batch_obj_start_labels.append(obj_start_labels)
               batch_obj_end_labels.append(obj_end_labels)
+              batch_raw_tokens.append(raw_tokens)
       
 
         res = {}
@@ -273,6 +278,8 @@ class EeCollate:
 
           res = sbj_obj_res
         
+        res['raw_tokens'] = batch_raw_tokens
+        
         return res
 
 
@@ -306,8 +313,6 @@ if __name__ == "__main__":
     collate = EeCollate(max_len=max_seq_len, tokenizer=tokenizer, tasks=tasks)
     batch_size = 16
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate.collate_fn)
-
-    for i, batch in enumerate(train_dataloader):
-        for k, v in batch.items():
-            print(k, v.shape)
-        break
+    # for eval_step, batch_data in enumerate(train_dataloader):
+    #   print(batch_data['raw_tokens'])
+    #   exit(0)
