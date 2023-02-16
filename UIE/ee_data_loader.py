@@ -130,25 +130,15 @@ class EeDataset(ListDataset):
               argu_start_labels = [0] * len(argu_token)
               argu_end_labels = [0] * len(argu_token)
 
-              # 因为text中多加了[TGR]--[CLS]
+              # 因为text中多加了[TGR]
+
+              if tgr1_index <= argument_start_index:
+                argument_start_index += 1
+              if tgr2_index <= argument_start_index:
+                argument_start_index += 1
+
               argu_start = len(pre_tokens) + 1 + argument_start_index
               argu_end = argu_start + len(argu) - 1
-
-              tmp = 0
-              if tgr1_index < argu_start:
-                tmp += 1
-              if tgr2_index < argu_start:
-                tmp += 1
-              
-              argu_start += tmp
-
-              tmp = 0
-              if tgr1_index < argu_end:
-                tmp += 1
-              if tgr2_index < argu_end:
-                tmp += 1
-              
-              argu_end += tmp
               
               if argu_end >= max_len - 1:
                 continue
@@ -300,7 +290,7 @@ if __name__ == "__main__":
 
     print(entity_label)
     tasks = ["obj"]
-    train_dataset = EeDataset(file_path='data/ee/duee/duee_train.json',
+    train_dataset = EeDataset(file_path='data/ee/duee/duee_dev.json',
                               tokenizer=tokenizer,
                               max_len=max_seq_len,
                               entity_label=entity_label,

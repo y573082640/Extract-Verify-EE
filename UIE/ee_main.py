@@ -219,7 +219,7 @@ class EePipeline:
               label,
               id2label,
               return_report=False):
-        role_metric, total_count = self.get_bj_metrics_helper(bj_outputs, id2label)
+        role_metric, total_count = self.get_bj_metrics_helper(bj_outputs, id2label,return_report)
         mirco_metrics = np.sum(role_metric, axis=0)
         mirco_metrics = get_p_r_f(mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
         res = {
@@ -233,7 +233,7 @@ class EePipeline:
             res["report"] = report
         return res
 
-    def get_bj_metrics_helper(self, outputs, id2label):
+    def get_bj_metrics_helper(self, outputs, id2label,return_report):
         total_count = [0 for _ in range(len(id2label))]
         role_metric = np.zeros([len(id2label), 3])
         s_logits = outputs["s_logits"]
@@ -252,22 +252,23 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
-            if str(pred_entities) != str(true_entities):
-                with open('log/argu_badcase.txt', 'a') as file_object:
-                    file_object.write("========================" + "\n")
-                    file_object.write(''.join(text) + "\n")
-                    file_object.write('真实' + "\n")
-                    for key in true_entities.keys():
-                        if len(true_entities[key]) > 0:
-                            for s_t_tuple in true_entities[key]:
-                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')        
+            if return_report:
+                if str(pred_entities) != str(true_entities):
+                    with open('log/argu_badcase.txt', 'a') as file_object:
+                        file_object.write("========================" + "\n")
+                        file_object.write(''.join(text) + "\n")
+                        file_object.write('真实' + "\n")
+                        for key in true_entities.keys():
+                            if len(true_entities[key]) > 0:
+                                for s_t_tuple in true_entities[key]:
+                                    file_object.write(key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')        
 
-                    file_object.write('预测' + "\n")                  
-                    for key in pred_entities.keys():
-                        if len(pred_entities[key]) > 0:
-                            for s_t_tuple in pred_entities[key]:
-                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')       
-                    file_object.write("========================" + "\n")
+                        file_object.write('预测' + "\n")                  
+                        for key in pred_entities.keys():
+                            if len(pred_entities[key]) > 0:
+                                for s_t_tuple in pred_entities[key]:
+                                    file_object.write(key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')       
+                        file_object.write("========================" + "\n")
 
             for idx, _type in enumerate(list(id2label.values())):
                 if _type not in pred_entities:
@@ -282,7 +283,7 @@ class EePipeline:
               label,
               id2label,
               return_report=False):
-        role_metric, total_count = self.get_ner_metrics_helper(ner_outputs)
+        role_metric, total_count = self.get_ner_metrics_helper(ner_outputs,return_report)
         mirco_metrics = np.sum(role_metric, axis=0)
         mirco_metrics = get_p_r_f(mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
         res = {
@@ -296,7 +297,7 @@ class EePipeline:
             res["report"] = report
         return res
 
-    def get_ner_metrics_helper(self, ner_outputs):
+    def get_ner_metrics_helper(self, ner_outputs,return_report):
         total_count = [0 for _ in range(len(self.args.ent_id2label))]
         role_metric = np.zeros([len(self.args.ent_id2label), 3])
         s_logits = ner_outputs["ner_s_logits"]
@@ -315,22 +316,23 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
-            if str(pred_entities) != str(true_entities):
-                with open('log/trigger_badcase.txt', 'a') as file_object:
-                    file_object.write("========================" + "\n")
-                    file_object.write(''.join(text) + "\n")
-                    file_object.write('真实' + "\n")
-                    for key in true_entities.keys():
-                        if len(true_entities[key]) > 0:
-                            for s_t_tuple in true_entities[key]:
-                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')        
+            if return_report:
+                if str(pred_entities) != str(true_entities):
+                    with open('log/trigger_badcase.txt', 'a') as file_object:
+                        file_object.write("========================" + "\n")
+                        file_object.write(''.join(text) + "\n")
+                        file_object.write('真实' + "\n")
+                        for key in true_entities.keys():
+                            if len(true_entities[key]) > 0:
+                                for s_t_tuple in true_entities[key]:
+                                    file_object.write(key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')        
 
-                    file_object.write('预测' + "\n")                  
-                    for key in pred_entities.keys():
-                        if len(pred_entities[key]) > 0:
-                            for s_t_tuple in pred_entities[key]:
-                                file_object.write(key + ":" + str(text[1+s_t_tuple[0]:1+s_t_tuple[1]]) + '\n')       
-            
+                        file_object.write('预测' + "\n")                  
+                        for key in pred_entities.keys():
+                            if len(pred_entities[key]) > 0:
+                                for s_t_tuple in pred_entities[key]:
+                                    file_object.write(key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')       
+                
             for idx, _type in enumerate(self.args.entity_label):
                 if _type not in pred_entities:
                     pred_entities[_type] = []
@@ -540,18 +542,18 @@ if __name__ == '__main__':
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
 
-    # ee_pipeline.train()
+    ee_pipeline.train()
     ee_pipeline.test()
 
-    # ee_pipeline.load_model()
-    # if "ner" in args.tasks:
-    #   raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-    #   print(raw_text)
-    #   print(ee_pipeline.predict(raw_text))
-    # elif "obj" in args.tasks:
-    #   textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-    #   texta = "组织关系-裁员_裁员人数"
-    #   texta = "组织关系-裁员_裁员方"
-    #   print(textb)
-    #   print(texta)
-    #   print(ee_pipeline.predict(textb, texta))
+    ee_pipeline.load_model()
+    if "ner" in args.tasks:
+      raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+      print(raw_text)
+      print(ee_pipeline.predict(raw_text))
+    elif "obj" in args.tasks:
+      textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+      texta = "组织关系-裁员_裁员人数"
+      texta = "组织关系-裁员_裁员方"
+      print(textb)
+      print(texta)
+      print(ee_pipeline.predict(textb, texta))

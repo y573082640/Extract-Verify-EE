@@ -2,7 +2,7 @@ import torch
 from transformers import BertTokenizer
 
 class EeArgs:
-    tasks = ["obj"]
+    tasks = ["ner"]
     data_name = "duee"
     data_dir = "ee"
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
