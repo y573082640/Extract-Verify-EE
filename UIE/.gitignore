@@ -1,3 +1,5 @@
 checkpoints/
 __pycache__
 model_hub/
+data/
+storage/

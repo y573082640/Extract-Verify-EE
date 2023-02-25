@@ -12,8 +12,15 @@ class UIEModel(nn.Module):
         bert_dir = args.bert_dir
         self.bert_config = BertConfig.from_pretrained(bert_dir)
         self.bert_model = BertModel.from_pretrained(bert_dir)
-        #TODO: 保存tokenizer到本地
+        # 因为添加了新的special_token
         self.bert_model.resize_token_embeddings(len(args.tokenizer))
+        # 用于词典增强
+        self.gaz_embedding = nn.Embedding(args.gaz_alphabet.size(),args.gaz_emb_dim)
+        self.gaz_embedding.weight.data.copy_(torch.from_numpy(args.pretrain_gaz_embedding))
+        self.word_embedding = nn.Embedding(args.word_alphabet.size(),args.word_emb_dim)
+        self.word_embedding.weight.data.copy_(torch.from_numpy(args.pretrain_word_embedding))
+        self.biword_embedding = nn.Embedding(args.biword_alphabet.size(),args.biword_emb_dim)
+        self.biword_embedding.weight.data.copy_(torch.from_numpy(args.pretrain_biword_embedding))
 
         if "ner" in args.tasks:
             self.ner_num_labels = args.ner_num_labels

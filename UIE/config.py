@@ -34,7 +34,32 @@ class EeArgs:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = BertTokenizer.from_pretrained(bert_dir)
     tokenizer.add_special_tokens({'additional_special_tokens':['[DEMO]','[ARG]','[TGR]']})
-
+    use_bigram = True
+    word_emb_dim = 50
+    biword_emb_dim = 50
+    char_emb_dim = 30
+    gaz_emb_dim = 50
+    pos_emb_dim = 24
+    gaz_dropout = 0.5
+    pretrain_word_embedding = None
+    pretrain_biword_embedding = None
+    pretrain_gaz_embedding = None
+    gaz_embedding = None
+    word_embedding = None
+    biword_embedding = None
+    label_size = 0
+    word_alphabet_size = 0
+    biword_alphabet_size = 0
+    char_alphabet_size = 0
+    label_alphabet_size = 0
+    hidden_dim=300
+    norm_word_emb = True
+    norm_biword_emb = True
+    norm_gaz_emb = False
+    char_emb = "/home/aistudio/data/data190512/gigaword_chn.all.a2b.uni.ite50.vec"
+    bichar_emb = "/home/aistudio/data/data190512/gigaword_chn.all.a2b.bi.ite50.vec"
+    gaz_file = "/home/aistudio/data/data190512/ctb.50d.vec"
+    
 
 
 class NerArgs:
