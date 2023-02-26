@@ -67,35 +67,34 @@ class EeDataset(ListDataset):
                     d = json.loads(d)
                     text = d["text"]
 
-                    # 词典增强的向量
-                    augment_Ids = generate_instance_with_gaz(
-                        text, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
-                        self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
-
                     event_list = d["event_list"]
                     if len(text) == 0:
                         continue
 
                     event_start_labels = np.zeros((len(ent_label2id), max_len))
                     event_end_labels = np.zeros((len(ent_label2id), max_len))
-
+                    
+                    # 词典增强的向量
+                    augment_Ids = generate_instance_with_gaz(
+                        text, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
+                        self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
+                    
+                    # 真实标签
                     for event in event_list:
                         event_type = event["event_type"]
                         trigger = event["trigger"]
                         trigger_start_index = event["trigger_start_index"]
-                        arguments = event["arguments"]
-                        event_tokens = [i for i in text]
 
+                        event_tokens = [i for i in text]
                         if len(event_tokens) > max_len - 2:
                             event_tokens = event_tokens[:max_len - 2]
-
                         event_tokens = ['[CLS]'] + event_tokens + ['[SEP]']
 
                         if trigger_start_index+len(trigger) >= max_len - 1:
                             continue
 
                         event_start_labels[ent_label2id[event_type]
-                                           ][trigger_start_index+1] = 1
+                                           ][trigger_start_index+1] = 1 #TODO: 如果丢入分类器前要去掉CLS，则不用+1
                         event_end_labels[ent_label2id[event_type]
                                          ][trigger_start_index+len(trigger)] = 1
 

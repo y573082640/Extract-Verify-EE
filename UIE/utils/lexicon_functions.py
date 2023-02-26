@@ -31,6 +31,8 @@ def build_gaz_alphabet(input_file, gaz, gaz_alphabet, gaz_alphabet_count, count=
         d = json.loads(line)
         text = d['text']
         text = list(text)
+        # BERT
+        # text = ['[CLS]'] + text + ['[SEP]']
         w_length = len(text)
         entitys = []
 
@@ -61,16 +63,20 @@ def build_gaz_alphabet(input_file, gaz, gaz_alphabet, gaz_alphabet_count, count=
     return gaz_alphabet, gaz_alphabet_count
 
 
-def build_alphabet(input_file, word_alphabet, biword_alphabet, pos_alphabet, NULLKEY="-null"):
+def build_alphabet(input_file, word_alphabet, biword_alphabet, pos_alphabet, NULLKEY="-null-"):
     in_lines = open(input_file, 'r', encoding="utf-8").readlines()
     for line in in_lines:
         d = json.loads(line)
         text = d['text']
-        words_and_flags = pseg.cut(text)  # jieba默认模式
-        for w, f in words_and_flags:
-            pos_alphabet.add(f)
+        # words_and_flags = pseg.cut(text)  # jieba默认模式
+        # for w, f in words_and_flags:
+        #     pos_alphabet.add(f)
 
         text = list(text)
+
+        # BERT形式
+        # text = ['[CLS]'] + text + ['[SEP]']
+
         for idx in range(len(text)):
             w = text[idx]
             # 单词
@@ -98,12 +104,11 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
     biwords = []  # 双词
     word_Ids = []  # 单词转为id（词表中）
     biword_Ids = []  # 双词转为id（词表中）
-    # pos
-    words_and_flags = pseg.cut(text)  # jieba默认模式
-    for w, f in words_and_flags:
-        f_index = pos_alphabet.get_index(f)
-        word_pos += len(w) * [f_index]
-    assert len(text) == len(word_pos)
+    # TODO:pos 
+    # words_and_flags = pseg.cut(text)  # jieba默认模式
+    # for w, f in words_and_flags:
+    #     f_index = pos_alphabet.get_index(f)
+    #     word_pos += len(w) * [f_index]
     text = list(text)
     # 引入词、双词信息
     # batch_size = 1
@@ -189,6 +194,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
 
 
 def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     batch_size = len(input_batch_list)
     words = [sent[0] for sent in input_batch_list]
     biwords = [sent[1] for sent in input_batch_list]
@@ -200,10 +206,10 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
 
     # 文本级别
     word_seq_lengths = torch.LongTensor(list(map(len, words)))
-    word_pos_tensor = torch.zeros((batch_size, max_len))
-    word_seq_tensor = torch.zeros((batch_size, max_len))
-    biword_seq_tensor = torch.zeros((batch_size, max_len))
-    mask = torch.zeros((batch_size, max_len))
+    word_pos_tensor = torch.zeros((batch_size, max_len)).long()
+    word_seq_tensor = torch.zeros((batch_size, max_len)).long()
+    biword_seq_tensor = torch.zeros((batch_size, max_len)).long()
+    mask = torch.zeros((batch_size, max_len),dtype=torch.bool)
 
     # gaz单词级别
     # 第i段文本第0个词的第0个label，文本内的label已经对齐了
@@ -211,12 +217,12 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     max_gaz_num = max(gaz_num)
     layer_gaz_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num).long()
     gaz_count_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num).long()
-    gaz_mask_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num).long()
+    gaz_mask_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num,dtype=torch.bool)
 
     for b, (seq, pos, biseq, seqlen, layergaz, gazmask, gazcount, gaznum) \
             in enumerate(zip(words, word_pos, biwords, word_seq_lengths, gazs, gaz_mask, gaz_count, gaz_num)):
-        assert len(pos) == len(seq)
-        word_pos_tensor[b, :seqlen] = torch.LongTensor(pos)
+        # assert len(pos) == len(seq)
+        # word_pos_tensor[b, :seqlen] = torch.LongTensor(pos)
         word_seq_tensor[b, :seqlen] = torch.LongTensor(seq)
         biword_seq_tensor[b, :seqlen] = torch.LongTensor(biseq)
 
@@ -226,12 +232,16 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
         gaz_count_tensor[:, seqlen:] = 1
         gaz_mask_tensor[b, :seqlen, :, :gaznum] = torch.LongTensor(gazmask)
 
-    word_pos_tensor.requires_grad_(True)
-    word_seq_tensor.requires_grad_(True)
-    biword_seq_tensor.requires_grad_(True)
-    mask.requires_grad_(True)
+    word_seq_lengths = word_seq_lengths.to(device)
+    word_pos_tensor = word_pos_tensor.to(device)
+    word_seq_tensor = word_seq_tensor.to(device)
+    biword_seq_tensor = biword_seq_tensor.to(device)
+    mask = mask.to(device)
+    layer_gaz_tensor = layer_gaz_tensor.to(device)
+    gaz_count_tensor = gaz_count_tensor.to(device)
+    gaz_mask_tensor = gaz_mask_tensor.to(device)
 
-    return gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask
+    return [gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask]
 
 
 def build_pretrain_embedding(embedding_path, word_alphabet, embedd_dim=100, norm=True):

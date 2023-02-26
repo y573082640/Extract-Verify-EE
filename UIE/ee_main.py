@@ -413,9 +413,9 @@ class EePipeline:
                     output = self.model(ner_input_ids=batch_data["ner_input_ids"],
                                         ner_token_type_ids=batch_data["ner_token_type_ids"],
                                         ner_attention_mask=batch_data["ner_attention_mask"],
-                                        # TODO:add lexicon embeddings
                                         ner_start_labels=batch_data["ner_start_labels"],
                                         ner_end_labels=batch_data["ner_end_labels"],
+                                        augment_Ids=batch_data["batch_augment_Ids"]
                                         )
                     loss = output["ner_output"]["ner_loss"]
                 elif "obj" in self.args.tasks:
