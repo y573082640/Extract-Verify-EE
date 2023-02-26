@@ -30,7 +30,7 @@ class EeArgs:
     train_batch_size = 32
     eval_batch_size = 32
     eval_step = 500
-    max_seq_len = 374
+    max_seq_len = 512
     weight_decay = 0.01
     adam_epsilon = 1e-8
     max_grad_norm = 5.0
@@ -48,9 +48,9 @@ class EeArgs:
     biword_emb_dim = 50
     gaz_emb_dim = 50
     pos_emb_dim = 24
-    hidden_dim = word_emb_dim+biword_emb_dim+4*gaz_emb_dim #TODO:加上pos_emb
+    hidden_dim = word_emb_dim + biword_emb_dim + 4 * gaz_emb_dim #TODO:加上pos_emb
     gaz_dropout = 0.5
-    use_count=False
+    use_count=True
     norm_word_emb = True
     norm_biword_emb = True
     norm_gaz_emb = False
@@ -67,7 +67,7 @@ class EeArgs:
     build_gaz_file(gaz_file, gaz)
     for filename in [train_path, dev_path, test_path]:
         build_alphabet(filename, word_alphabet, biword_alphabet, pos_alphabet)
-        build_gaz_alphabet(filename, gaz, gaz_alphabet, gaz_alphabet_count)
+        build_gaz_alphabet(filename, gaz, gaz_alphabet, gaz_alphabet_count, count=use_count)
     word_alphabet.keep_growing = False
     biword_alphabet.keep_growing = False
     pos_alphabet.keep_growing = False

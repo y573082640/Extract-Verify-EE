@@ -109,7 +109,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
     # for w, f in words_and_flags:
     #     f_index = pos_alphabet.get_index(f)
     #     word_pos += len(w) * [f_index]
-    text = list(text)
+    # text = list(text)
     # 引入词、双词信息
     # batch_size = 1
     for idx in range(len(text)):

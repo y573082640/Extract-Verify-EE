@@ -75,8 +75,10 @@ class EeDataset(ListDataset):
                     event_end_labels = np.zeros((len(ent_label2id), max_len))
                     
                     # 词典增强的向量
+                    bert_token = [i for i in text]
+                    bert_token = ['[CLS]'] + bert_token + ['[SEP]']
                     augment_Ids = generate_instance_with_gaz(
-                        text, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
+                        bert_token, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
                         self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
                     
                     # 真实标签

@@ -34,9 +34,9 @@ class UIEModel(nn.Module):
             self.module_end_list = nn.ModuleList()
             for i in range(args.ner_num_labels):
                 self.module_start_list.append(
-                    nn.Linear(self.bert_config.hidden_size, 1))
+                    nn.Linear(self.bert_config.hidden_size + self.args.hidden_dim, 1))
                 self.module_end_list.append(
-                    nn.Linear(self.bert_config.hidden_size, 1))
+                    nn.Linear(self.bert_config.hidden_size + self.args.hidden_dim, 1))
             self.ner_criterion = nn.BCEWithLogitsLoss()
 
         if "sbj" in args.tasks:
@@ -227,49 +227,28 @@ class UIEModel(nn.Module):
         ## 2
         batch_size = word_seq_tensor.size()[0]
         seq_len = word_seq_tensor.size()[1]
-
         word_embs = self.word_embedding(word_seq_tensor)
-        # w_max = word_seq_tensor.view(-1).max()
-        # w_min = word_seq_tensor.view(-1).min()
-        # assert w_max < self.args.word_alphabet.size()
-        # assert w_min > -1
         biword_embs = self.biword_embedding(biword_seq_tensor)
-        # max_index = torch.argmax(layer_gaz_tensor)
-        # min_index = torch.argmin(layer_gaz_tensor)
-        # bw_max = biword_seq_tensor.view(-1)[max_index]
-        # bw_min = biword_seq_tensor.view(-1)[min_index]
-        # assert bw_max < self.args.biword_alphabet.size()
-        # assert bw_min > -1   
-        # word_inputs_d = torch.cat([word_embs,biword_embs],dim=-1)
-        # # gaz embs
         gaz_embeds = self.gaz_embedding(layer_gaz_tensor)
-        # index = torch.argmax(layer_gaz_tensor)
-        # g_max = layer_gaz_tensor.view(-1)[index]
-        # g_min = layer_gaz_tensor.view(-1).min()
-        # assert g_max < self.args.gaz_alphabet.size()
-        # assert g_min > -1 
-        ## mask复制成与embedding相同的长度
-        # gaz_mask = gaz_mask_tensor.unsqueeze(-1).repeat(1,1,1,1,self.args.gaz_emb_dim)
-        # ## padding部分全部赋值为0
-        # gaz_embeds = gaz_embeds.data.masked_fill_(gaz_mask.data, 0)  #(batch,lenth,4,gaz_word,gaz_embed_dim)  ge:gaz_embed_dim
-        # if self.args.use_count:
-        #     count_sum = torch.sum(gaz_count_tensor, dim=3, keepdim=True)  #(b,l,4,gn)
-        #     count_sum = torch.sum(count_sum, dim=2, keepdim=True)  #(b,l,1,1)
-        #     weights = gaz_count_tensor.div(count_sum)  #(b,l,4,g)
-        #     weights = weights*4
-        #     weights = weights.unsqueeze(-1)
-        #     gaz_embeds = weights*gaz_embeds  #(b,l,4,g,e)
-        #     gaz_embeds = torch.sum(gaz_embeds, dim=3)  #(b,l,4,e)
+        # mask复制成与embedding相同的长度
+        ## padding部分全部赋值为0，有必要吗
+        if self.args.use_count:
+            count_sum = torch.sum(gaz_count_tensor, dim=3, keepdim=True)  #(b,l,4,gn)
+            count_sum = torch.sum(count_sum, dim=2, keepdim=True)  #(b,l,1,1)
+            weights = gaz_count_tensor.div(count_sum)  #(b,l,4,g)
+            weights = weights*4
+            weights = weights.unsqueeze(-1)
+            gaz_embeds = weights*gaz_embeds  #(b,l,4,g,e)
+            gaz_embeds = torch.sum(gaz_embeds, dim=3)  #(b,l,4,e)
+        else:
+            gaz_num = (gaz_mask_tensor == 0).sum(dim=-1, keepdim=True).float()  #(b,l,4,1)
 
-        # else:
-        #     gaz_num = (gaz_mask_tensor == 0).sum(dim=-1, keepdim=True).float()  #(b,l,4,1)
-        #     gaz_embeds = gaz_embeds.sum(-2) / gaz_num  #(b,l,4,ge)/(b,l,4,1)
+            gaz_embeds = gaz_embeds.sum(-2) / gaz_num  #(b,l,4,ge)/(b,l,4,1)
+        word_inputs_d = torch.cat([word_embs,biword_embs],dim=-1)
+        gaz_embeds_cat = gaz_embeds.view(batch_size,seq_len,-1)  #(b,l,4*ge)
+        word_input_cat = torch.cat([word_inputs_d, gaz_embeds_cat], dim=-1)  #(b,l,we+4*ge)
+        word_input_cat = torch.cat([word_input_cat, seq_bert_output], dim=-1)
 
-        # gaz_embeds_cat = gaz_embeds.view(batch_size,seq_len,-1)  #(b,l,4*ge)
-        # word_input_cat = torch.cat([word_inputs_d, gaz_embeds_cat], dim=-1)  #(b,l,we+4*ge)
-        # print(word_input_cat.shape) # torch.Size([32, 512, 300])
-        # print(seq_bert_output.shape) # (batch_size, sequence_length, hidden_size)
-        # word_input_cat = torch.cat([word_input_cat, seq_bert_output], dim=-1)
         # 加上词典向量
         all_start_logits = []
         all_end_logits = []
@@ -282,8 +261,8 @@ class UIEModel(nn.Module):
         }
 
         for i in range(self.ner_num_labels):
-            start_logits = self.module_start_list[i](seq_bert_output).squeeze()
-            end_logits = self.module_end_list[i](seq_bert_output).squeeze()
+            start_logits = self.module_start_list[i](word_input_cat).squeeze()
+            end_logits = self.module_end_list[i](word_input_cat).squeeze()
 
             all_start_logits.append(start_logits.detach().cpu())
             all_end_logits.append(end_logits.detach().cpu())
