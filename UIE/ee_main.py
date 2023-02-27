@@ -175,12 +175,15 @@ class EePipeline:
                                 ner_attention_mask=batch_data["ner_attention_mask"],
                                 ner_start_labels=batch_data["ner_start_labels"],
                                 ner_end_labels=batch_data["ner_end_labels"],
+                                augment_Ids=batch_data["batch_augment_Ids"]
                                 )
 
-            ner_start_logits = output["ner_output"]["ner_start_logits"]
+            ner_start_logits = output["ner_output"]["ner_start_logits"] # (num_labels,batch_size,max_len)
             ner_end_logits = output["ner_output"]["ner_end_logits"]
             batch_size = batch_data['ner_input_ids'].size(0)
+
             for i in range(batch_size):
+                # 对一条数据上不同label的预测值
                 ner_s_logits.append([logit[i, :]
                                     for logit in ner_start_logits])
                 ner_e_logits.append([logit[i, :] for logit in ner_end_logits])
@@ -204,12 +207,13 @@ class EePipeline:
                     ner_start_labels, tmp_ner_start_labels, axis=0)
                 ner_end_labels = np.append(
                     ner_end_labels, tmp_ner_end_labels, axis=0)
-
+                
+        print(ner_start_labels.shape)
         ner_outputs = {
-            "ner_s_logits": ner_s_logits,
+            "ner_s_logits": ner_s_logits, # (1492,label_num,max_len)
             "ner_e_logits": ner_e_logits,
-            "ner_masks": ner_masks,
-            "ner_start_labels": ner_start_labels,
+            "ner_masks": ner_masks, 
+            "ner_start_labels": ner_start_labels, # (1492, 65, 256)
             "ner_end_labels": ner_end_labels,
             'raw_tokens': raw_tokens
         }
@@ -302,6 +306,7 @@ class EePipeline:
                         return_report=False):
         role_metric, total_count = self.get_ner_metrics_helper(
             ner_outputs, return_report)
+        print(role_metric)
         mirco_metrics = np.sum(role_metric, axis=0)
         mirco_metrics = get_p_r_f(
             mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
@@ -320,18 +325,37 @@ class EePipeline:
     def get_ner_metrics_helper(self, ner_outputs, return_report):
         total_count = [0 for _ in range(len(self.args.ent_id2label))]
         role_metric = np.zeros([len(self.args.ent_id2label), 3])
-        s_logits = ner_outputs["ner_s_logits"]
-        e_logits = ner_outputs["ner_e_logits"]
-        s_label = ner_outputs["ner_start_labels"]
-        e_label = ner_outputs["ner_end_labels"]
-        masks = ner_outputs["ner_masks"]
+        s_logits = ner_outputs["ner_s_logits"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        e_logits = ner_outputs["ner_e_logits"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        s_label = ner_outputs["ner_start_labels"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        e_label = ner_outputs["ner_end_labels"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        masks = ner_outputs["ner_masks"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
         raw_tokens = ner_outputs["raw_tokens"]
+        with open('log/trigger_badcase.txt', 'w') as file_object:
+            file_object.write(str(time.time()) + "\n")
+            for i in range(19):
+                file_object.write(str(s_logits[i][53]) + "\n") # 组织关系-裁员
+                file_object.write(str(e_logits[i][53]) + "\n")
+                file_object.write(str("*"*50) + "\n")
+                file_object.write(str(s_label[i][53]) + "\n")
+                file_object.write(str(e_label[i][53]) + "\n")
+                file_object.write(str("="*100) + "\n")
+            for i in range(19,28):
+                file_object.write(str(s_logits[i][50]) + "\n") # 组织关系-裁员
+                file_object.write(str(e_logits[i][50]) + "\n")
+                file_object.write(str("*"*50) + "\n")
+                file_object.write(str(s_label[i][50]) + "\n")
+                file_object.write(str(e_label[i][50]) + "\n")
+                file_object.write(str("="*100) + "\n")
+            exit(0)
         with open('log/trigger_badcase.txt', 'w') as file_object:
             file_object.write(str(time.time()) + "\n")
         for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):
             length = sum(mask)
+            # input = (label_num, max_len)
             pred_entities = ner_decode2(
                 s_logit, e_logit, length, self.args.ent_id2label)
+            # output = {label:predict_index}
             true_entities = ner_decode2(
                 s_label, e_label, length, self.args.ent_id2label)
             # print("========================")
@@ -356,11 +380,13 @@ class EePipeline:
                                 for s_t_tuple in pred_entities[key]:
                                     file_object.write(
                                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
-
+                                    
+            # 对第i条数据，计算每个事件类型的预测结果
             for idx, _type in enumerate(self.args.entity_label):
                 if _type not in pred_entities:
                     pred_entities[_type] = []
                 total_count[idx] += len(true_entities[_type])
+                # pred_entities[_type] = [(start_index,end_index+1)...]
                 role_metric[idx] += calculate_metric(
                     pred_entities[_type], true_entities[_type])
 

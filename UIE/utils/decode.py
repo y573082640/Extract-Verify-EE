@@ -49,6 +49,7 @@ def ner_decode2(start_logits, end_logits, length, id2label):
             for j, e_type in enumerate(end_pred[i:]):
                 if s_type == e_type:
                     predict_entities[id2label[label_id]].append((i, i+j+1))
+                    # 找到距离自己最近的结束符号就停止了
                     break
     return predict_entities
 

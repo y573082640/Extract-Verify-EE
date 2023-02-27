@@ -232,14 +232,11 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
         gaz_count_tensor[:, seqlen:] = 1
         gaz_mask_tensor[b, :seqlen, :, :gaznum] = torch.LongTensor(gazmask)
 
-    word_seq_lengths = word_seq_lengths.to(device)
     word_pos_tensor = word_pos_tensor.to(device)
     word_seq_tensor = word_seq_tensor.to(device)
     biword_seq_tensor = biword_seq_tensor.to(device)
-    mask = mask.to(device)
     layer_gaz_tensor = layer_gaz_tensor.to(device)
     gaz_count_tensor = gaz_count_tensor.to(device)
-    gaz_mask_tensor = gaz_mask_tensor.to(device)
 
     return [gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask]
 

@@ -15,7 +15,8 @@ def calculate_metric(predict, gt):
     for entity_predict in predict:
         flag = 0
         for entity_gt in gt:
-            if entity_predict[0] == entity_gt[0] and entity_predict[1] == entity_gt[1]:
+            # pred_entities[_type] = [(start_index,end_index+1)...]
+            if entity_predict[0] == entity_gt[0] and entity_predict[1] == entity_gt[1]: # 起点=起点，终点=终点
                 flag = 1
                 tp += 1
                 break
@@ -28,6 +29,7 @@ def calculate_metric(predict, gt):
 
 
 def get_p_r_f(tp, fp, fn):
+    print(tp, fp, fn)
     p = tp / (tp + fp) if tp + fp != 0 else 0
     r = tp / (tp + fn) if tp + fn != 0 else 0
     f1 = 2 * p * r / (p + r) if p + r != 0 else 0
