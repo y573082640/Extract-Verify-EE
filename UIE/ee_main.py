@@ -331,23 +331,23 @@ class EePipeline:
         e_label = ner_outputs["ner_end_labels"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
         masks = ner_outputs["ner_masks"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
         raw_tokens = ner_outputs["raw_tokens"]
-        with open('log/trigger_badcase.txt', 'w') as file_object:
-            file_object.write(str(time.time()) + "\n")
-            for i in range(19):
-                file_object.write(str(s_logits[i][53]) + "\n") # 组织关系-裁员
-                file_object.write(str(e_logits[i][53]) + "\n")
-                file_object.write(str("*"*50) + "\n")
-                file_object.write(str(s_label[i][53]) + "\n")
-                file_object.write(str(e_label[i][53]) + "\n")
-                file_object.write(str("="*100) + "\n")
-            for i in range(19,28):
-                file_object.write(str(s_logits[i][50]) + "\n") # 组织关系-裁员
-                file_object.write(str(e_logits[i][50]) + "\n")
-                file_object.write(str("*"*50) + "\n")
-                file_object.write(str(s_label[i][50]) + "\n")
-                file_object.write(str(e_label[i][50]) + "\n")
-                file_object.write(str("="*100) + "\n")
-            exit(0)
+        # with open('log/trigger_badcase.txt', 'w') as file_object:
+        #     file_object.write(str(time.time()) + "\n")
+        #     for i in range(19):
+        #         file_object.write(str(s_logits[i][53]) + "\n") # 组织关系-裁员
+        #         file_object.write(str(e_logits[i][53]) + "\n")
+        #         file_object.write(str("*"*50) + "\n")
+        #         file_object.write(str(s_label[i][53]) + "\n")
+        #         file_object.write(str(e_label[i][53]) + "\n")
+        #         file_object.write(str("="*100) + "\n")
+        #     for i in range(19,28):
+        #         file_object.write(str(s_logits[i][50]) + "\n") # 组织关系-裁员
+        #         file_object.write(str(e_logits[i][50]) + "\n")
+        #         file_object.write(str("*"*50) + "\n")
+        #         file_object.write(str(s_label[i][50]) + "\n")
+        #         file_object.write(str(e_label[i][50]) + "\n")
+        #         file_object.write(str("="*100) + "\n")
+        #     exit(0)
         with open('log/trigger_badcase.txt', 'w') as file_object:
             file_object.write(str(time.time()) + "\n")
         for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):

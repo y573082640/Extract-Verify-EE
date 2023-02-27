@@ -29,7 +29,7 @@ class EeArgs:
     train_epoch = 40
     train_batch_size = 32
     eval_batch_size = 32
-    eval_step = 1
+    eval_step = 1000
     max_seq_len = 256
     weight_decay = 0.01
     adam_epsilon = 1e-8

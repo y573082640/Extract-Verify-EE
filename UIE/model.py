@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from transformers import BertConfig, BertModel
-
-
+from utils.decode import sigmoid
+import numpy as np
 class UIEModel(nn.Module):
     def __init__(self, args):
         super(UIEModel, self).__init__()
@@ -286,9 +286,24 @@ class UIEModel(nn.Module):
                 # batch_size * max_len
                 active_start_labels = ner_start_labels[:, i, :].contiguous(
                 ).view(-1)[active_loss]
+
                 # batch_size * max_len
                 active_end_labels = ner_end_labels[:, i, :].contiguous(
                 ).view(-1)[active_loss]
+                
+                t1 = np.sum(np.where(sigmoid(active_start_logits.detach().cpu()) > 0.5, 1, 0))
+                t2 = np.sum(np.where(sigmoid(active_end_logits.detach().cpu()) > 0.5, 1, 0))
+                t3 = np.sum(np.where(active_start_labels.detach().cpu() > 0.5, 1, 0))
+                t4 = np.sum(np.where(active_end_labels.detach().cpu() > 0.5, 1, 0))
+                # t5 = np.sum(np.where(active_start_labels.detach().cpu() > 0.5, 1, 0))
+                # t6 = np.sum(np.where(active_end_labels.detach().cpu() > 0.5, 1, 0))
+                if t3 > 0 and t4 >0:
+                    print("下两行为：预测为真的数量")
+                    print(t1,t2)
+                    print("下两行为：真实为真的数量")
+                    print(t3,t4)
+                    # print("下两行为：mask前为真的数量")
+                    # print(t3,t4)
 
                 start_loss = self.ner_criterion(
                     active_start_logits, active_start_labels)
