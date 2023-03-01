@@ -1,19 +1,18 @@
 import sys
 
 sys.path.append('..')
-
-from UIE.utils.metrics import calculate_metric, classification_report, get_p_r_f
-from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
-from UIE.ee_data_loader import EeDataset, EeCollate
-from UIE.config import EeArgs
-from UIE.model import UIEModel
-from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
-from sklearn.metrics import classification_report as cr
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from torch.utils.data import DataLoader, RandomSampler
-import torch
-import numpy as np
 import time
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, RandomSampler
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import classification_report as cr
+from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
+from UIE.model import UIEModel
+from UIE.config import EeArgs
+from UIE.ee_data_loader import EeDataset, EeCollate
+from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
+from UIE.utils.metrics import calculate_metric, classification_report, get_p_r_f
 
 
 
@@ -178,7 +177,8 @@ class EePipeline:
                                 augment_Ids=batch_data["batch_augment_Ids"]
                                 )
 
-            ner_start_logits = output["ner_output"]["ner_start_logits"] # (num_labels,batch_size,max_len)
+            # (num_labels,batch_size,max_len)
+            ner_start_logits = output["ner_output"]["ner_start_logits"]
             ner_end_logits = output["ner_output"]["ner_end_logits"]
             batch_size = batch_data['ner_input_ids'].size(0)
 
@@ -207,13 +207,13 @@ class EePipeline:
                     ner_start_labels, tmp_ner_start_labels, axis=0)
                 ner_end_labels = np.append(
                     ner_end_labels, tmp_ner_end_labels, axis=0)
-                
+
         print(ner_start_labels.shape)
         ner_outputs = {
-            "ner_s_logits": ner_s_logits, # (1492,label_num,max_len)
+            "ner_s_logits": ner_s_logits,  # (1492,label_num,max_len)
             "ner_e_logits": ner_e_logits,
-            "ner_masks": ner_masks, 
-            "ner_start_labels": ner_start_labels, # (1492, 65, 256)
+            "ner_masks": ner_masks,
+            "ner_start_labels": ner_start_labels,  # (1492, 65, 256)
             "ner_end_labels": ner_end_labels,
             'raw_tokens': raw_tokens
         }
@@ -325,11 +325,16 @@ class EePipeline:
     def get_ner_metrics_helper(self, ner_outputs, return_report):
         total_count = [0 for _ in range(len(self.args.ent_id2label))]
         role_metric = np.zeros([len(self.args.ent_id2label), 3])
-        s_logits = ner_outputs["ner_s_logits"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        e_logits = ner_outputs["ner_e_logits"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        s_label = ner_outputs["ner_start_labels"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        e_label = ner_outputs["ner_end_labels"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        masks = ner_outputs["ner_masks"] # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        s_logits = ner_outputs["ner_s_logits"]
+        # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        e_logits = ner_outputs["ner_e_logits"]
+        # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        s_label = ner_outputs["ner_start_labels"]
+        # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        e_label = ner_outputs["ner_end_labels"]
+        # (1492, 65, 256) = (num_cases,num_labels,max_len)
+        masks = ner_outputs["ner_masks"]
         raw_tokens = ner_outputs["raw_tokens"]
         # with open('log/trigger_badcase.txt', 'w') as file_object:
         #     file_object.write(str(time.time()) + "\n")
@@ -380,13 +385,13 @@ class EePipeline:
                                 for s_t_tuple in pred_entities[key]:
                                     file_object.write(
                                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
-                                    
+
             # 对第i条数据，计算每个事件类型的预测结果
             for idx, _type in enumerate(self.args.entity_label):
                 if _type not in pred_entities:
                     pred_entities[_type] = []
                 total_count[idx] += len(true_entities[_type])
-                # pred_entities[_type] = [(start_index,end_index+1)...]
+                ### pred_entities[_type] = [(start_index,end_index+1)...]
                 role_metric[idx] += calculate_metric(
                     pred_entities[_type], true_entities[_type])
 
@@ -429,6 +434,8 @@ class EePipeline:
         self.model.to(self.args.device)
         eval_step = self.args.eval_step
         best_f1 = 0.
+        with open('log/trigger_train_log.txt', 'w') as file_object:
+            file_object.write(str(time.time()) + "\n")
         for epoch in range(1, self.args.train_epoch + 1):
             for step, batch_data in enumerate(train_loader):
                 self.model.train()
@@ -468,6 +475,11 @@ class EePipeline:
                         metrics = self.eval_forward(
                             dev_loader, self.args.entity_label, self.args.ent_id2label)
                         ner_metrics = metrics["ner_metrics"]
+                        with open('log/trigger_train_log.txt', 'a') as file_object:
+                            file_object.write('【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(ner_metrics["precision"],
+                                                                                             ner_metrics["recall"],
+                                                                                             ner_metrics["f1"]) + "\n")
+
                         print('【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(ner_metrics["precision"],
                                                                                              ner_metrics["recall"],
                                                                                              ner_metrics["f1"]))

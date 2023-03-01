@@ -75,15 +75,15 @@ class EeDataset(ListDataset):
                     event_end_labels = np.zeros((len(ent_label2id), max_len))
                     
                     # 词典增强的向量
-                    # bert_token = [i for i in text]
-                    # bert_token = ['[CLS]'] + bert_token + ['[SEP]']
+                    bert_token = [i for i in text]
+                    bert_token = ['[CLS]'] + bert_token + ['[SEP]']
 
-                    # if len(bert_token) > max_len - 2:
-                    #         bert_token = bert_token[:max_len - 2]
+                    if len(bert_token) > max_len - 2:
+                            bert_token = bert_token[:max_len - 2]
 
-                    # augment_Ids = generate_instance_with_gaz(
-                    #     bert_token, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
-                    #     self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
+                    augment_Ids = generate_instance_with_gaz(
+                        bert_token, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
+                        self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
                     
                     # 真实标签
                     for event in event_list:
@@ -108,7 +108,7 @@ class EeDataset(ListDataset):
                         "ner_tokens": event_tokens,
                         "ner_start_labels": event_start_labels,
                         "ner_end_labels": event_end_labels,
-                        "augment_Ids": None
+                        "augment_Ids": augment_Ids
                     }
 
                     ner_data.append(event_data)
@@ -287,7 +287,7 @@ class EeCollate:
                 batch_ner_start_labels, dtype=torch.float)
             batch_ner_end_labels = convert_list_to_tensor(
                 batch_ner_end_labels, dtype=torch.float)
-            # batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
+            batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
 
             ner_res = {
                 "ner_input_ids": batch_ner_token_ids,

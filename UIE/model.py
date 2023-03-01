@@ -12,21 +12,21 @@ class UIEModel(nn.Module):
         bert_dir = args.bert_dir
         self.bert_config = BertConfig.from_pretrained(bert_dir)
         self.bert_model = BertModel.from_pretrained(bert_dir)
-        # 因为添加了新的special_token
+        ### 因为添加了新的special_token
         self.bert_model.resize_token_embeddings(len(args.tokenizer))
-        # 用于词典增强
-        # self.gaz_embedding = nn.Embedding(
-        #     args.gaz_alphabet.size(), args.gaz_emb_dim)
-        # self.gaz_embedding.weight.data.copy_(
-        #     torch.from_numpy(args.pretrain_gaz_embedding))
-        # self.word_embedding = nn.Embedding(
-        #     args.word_alphabet.size(), args.word_emb_dim)
-        # self.word_embedding.weight.data.copy_(
-        #     torch.from_numpy(args.pretrain_word_embedding))
-        # self.biword_embedding = nn.Embedding(
-        #     args.biword_alphabet.size(), args.biword_emb_dim)
-        # self.biword_embedding.weight.data.copy_(
-        #     torch.from_numpy(args.pretrain_biword_embedding))
+        ### 用于词典增强
+        self.gaz_embedding = nn.Embedding(
+            args.gaz_alphabet.size(), args.gaz_emb_dim)
+        self.gaz_embedding.weight.data.copy_(
+            torch.from_numpy(args.pretrain_gaz_embedding))
+        self.word_embedding = nn.Embedding(
+            args.word_alphabet.size(), args.word_emb_dim)
+        self.word_embedding.weight.data.copy_(
+            torch.from_numpy(args.pretrain_word_embedding))
+        self.biword_embedding = nn.Embedding(
+            args.biword_alphabet.size(), args.biword_emb_dim)
+        self.biword_embedding.weight.data.copy_(
+            torch.from_numpy(args.pretrain_biword_embedding))
 
         if "ner" in args.tasks:
             self.ner_num_labels = args.ner_num_labels
@@ -34,9 +34,9 @@ class UIEModel(nn.Module):
             self.module_end_list = nn.ModuleList()
             for i in range(args.ner_num_labels):
                 self.module_start_list.append(
-                    nn.Linear(self.bert_config.hidden_size , 1))
+                    nn.Linear(self.bert_config.hidden_size+self.args.hidden_dim , 1))
                 self.module_end_list.append(
-                    nn.Linear(self.bert_config.hidden_size , 1))
+                    nn.Linear(self.bert_config.hidden_size+self.args.hidden_dim, 1))
             self.ner_criterion = nn.BCEWithLogitsLoss()
 
         if "sbj" in args.tasks:
@@ -220,34 +220,34 @@ class UIEModel(nn.Module):
         
         # BERT的输出
         seq_bert_output = bert_output[0]
-        # # # 预训练词向量的输出
-        # ## 1
-        # gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, \
-        # word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask = augment_Ids
-        # ## 2
-        # batch_size = word_seq_tensor.size()[0]
-        # seq_len = word_seq_tensor.size()[1]
-        # word_embs = self.word_embedding(word_seq_tensor)
-        # biword_embs = self.biword_embedding(biword_seq_tensor)
-        # gaz_embeds = self.gaz_embedding(layer_gaz_tensor)
-        # # mask复制成与embedding相同的长度
-        # ## padding部分全部赋值为0，有必要吗
-        # if self.args.use_count:
-        #     count_sum = torch.sum(gaz_count_tensor, dim=3, keepdim=True)  #(b,l,4,gn)
-        #     count_sum = torch.sum(count_sum, dim=2, keepdim=True)  #(b,l,1,1)
-        #     weights = gaz_count_tensor.div(count_sum)  #(b,l,4,g)
-        #     weights = weights*4
-        #     weights = weights.unsqueeze(-1)
-        #     gaz_embeds = weights*gaz_embeds  #(b,l,4,g,e)
-        #     gaz_embeds = torch.sum(gaz_embeds, dim=3)  #(b,l,4,e)
-        # else:
-        #     gaz_num = (gaz_mask_tensor == 0).sum(dim=-1, keepdim=True).float()  #(b,l,4,1)
+        ## 预训练词向量的输出
+        ## 1
+        gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, \
+        word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask = augment_Ids
+        ## 2
+        batch_size = word_seq_tensor.size()[0]
+        seq_len = word_seq_tensor.size()[1]
+        word_embs = self.word_embedding(word_seq_tensor)
+        biword_embs = self.biword_embedding(biword_seq_tensor)
+        gaz_embeds = self.gaz_embedding(layer_gaz_tensor)
+        # mask复制成与embedding相同的长度
+        ## padding部分全部赋值为0，有必要吗
+        if self.args.use_count:
+            count_sum = torch.sum(gaz_count_tensor, dim=3, keepdim=True)  #(b,l,4,gn)
+            count_sum = torch.sum(count_sum, dim=2, keepdim=True)  #(b,l,1,1)
+            weights = gaz_count_tensor.div(count_sum)  #(b,l,4,g)
+            weights = weights*4
+            weights = weights.unsqueeze(-1)
+            gaz_embeds = weights*gaz_embeds  #(b,l,4,g,e)
+            gaz_embeds = torch.sum(gaz_embeds, dim=3)  #(b,l,4,e)
+        else:
+            gaz_num = (gaz_mask_tensor == 0).sum(dim=-1, keepdim=True).float()  #(b,l,4,1)
 
-        #     gaz_embeds = gaz_embeds.sum(-2) / gaz_num  #(b,l,4,ge)/(b,l,4,1)
-        # word_inputs_d = torch.cat([word_embs,biword_embs],dim=-1)
-        # gaz_embeds_cat = gaz_embeds.view(batch_size,seq_len,-1)  #(b,l,4*ge)
-        # word_input_cat = torch.cat([word_inputs_d, gaz_embeds_cat], dim=-1)  #(b,l,we+4*ge)
-        # word_input_cat = torch.cat([word_input_cat, seq_bert_output], dim=-1)
+            gaz_embeds = gaz_embeds.sum(-2) / gaz_num  #(b,l,4,ge)/(b,l,4,1)
+        word_inputs_d = torch.cat([word_embs,biword_embs],dim=-1)
+        gaz_embeds_cat = gaz_embeds.view(batch_size,seq_len,-1)  #(b,l,4*ge)
+        word_input_cat = torch.cat([word_inputs_d, gaz_embeds_cat], dim=-1)  #(b,l,we+4*ge)
+        word_input_cat = torch.cat([word_input_cat, seq_bert_output], dim=-1)
 
         # 加上词典向量
         all_start_logits = []
@@ -262,10 +262,10 @@ class UIEModel(nn.Module):
 
         # 直接把预测值和真实值展平，做一个batch_size * max_len长度一维向量的BCEWithLogitsLoss
         for i in range(self.ner_num_labels):
-            # (batch_size,max_len,768)
+            # (batch_size,max_len,hidden_size)
 
-            start_logits = self.module_start_list[i](seq_bert_output).squeeze()
-            end_logits = self.module_end_list[i](seq_bert_output).squeeze()
+            start_logits = self.module_start_list[i](word_input_cat).squeeze()
+            end_logits = self.module_end_list[i](word_input_cat).squeeze()
             # torch.Size([32, 256]) = (batch_size,max_len)
 
             all_start_logits.append(start_logits.detach().cpu())
@@ -295,15 +295,11 @@ class UIEModel(nn.Module):
                 t2 = np.sum(np.where(sigmoid(active_end_logits.detach().cpu()) > 0.5, 1, 0))
                 t3 = np.sum(np.where(active_start_labels.detach().cpu() > 0.5, 1, 0))
                 t4 = np.sum(np.where(active_end_labels.detach().cpu() > 0.5, 1, 0))
-                # t5 = np.sum(np.where(active_start_labels.detach().cpu() > 0.5, 1, 0))
-                # t6 = np.sum(np.where(active_end_labels.detach().cpu() > 0.5, 1, 0))
-                if t3 > 0 and t4 >0:
+                if t1 > 0 and t2 >0:
                     print("下两行为：预测为真的数量")
                     print(t1,t2)
                     print("下两行为：真实为真的数量")
                     print(t3,t4)
-                    # print("下两行为：mask前为真的数量")
-                    # print(t3,t4)
 
                 start_loss = self.ner_criterion(
                     active_start_logits, active_start_labels)
