@@ -405,7 +405,7 @@ class EePipeline:
                                   tasks=self.args.tasks,
                                   args=self.args)
         collate = EeCollate(max_len=self.args.max_seq_len,
-                            tokenizer=self.args.tokenizer, tasks=self.args.tasks)
+                            tokenizer=self.args.tokenizer, tasks=self.args.tasks, args=self.args)
         train_sampler = RandomSampler(train_dataset)
         train_loader = DataLoader(dataset=train_dataset,
                                   batch_size=self.args.train_batch_size,
@@ -510,7 +510,7 @@ class EePipeline:
                                  tasks=self.args.tasks,
                                  args=self.args)
         collate = EeCollate(max_len=self.args.max_seq_len,
-                            tokenizer=self.args.tokenizer, tasks=self.args.tasks)
+                            tokenizer=self.args.tokenizer, tasks=self.args.tasks, args=self.args)
         test_dataset = test_dataset
         test_loader = DataLoader(dataset=test_dataset,
                                  batch_size=self.args.eval_batch_size,

@@ -26,12 +26,7 @@ class ListDataset(Dataset):
                  tasks=None,
                  args=None,
                  **kwargs):
-        self.word_alphabet = args.word_alphabet
-        self.pos_alphabet = args.pos_alphabet
-        self.biword_alphabet = args.biword_alphabet
-        self.gaz = args.gaz
-        self.gaz_alphabet = args.gaz_alphabet
-        self.gaz_alphabet_count = args.gaz_alphabet_count
+        self.args = args
         self.kwargs = kwargs
         if isinstance(file_path, (str, list)):
             self.data = self.load_data(
@@ -81,10 +76,13 @@ class EeDataset(ListDataset):
                     if len(bert_token) > max_len - 2:
                             bert_token = bert_token[:max_len - 2]
 
-                    augment_Ids = generate_instance_with_gaz(
-                        bert_token, self.pos_alphabet, self.word_alphabet, self.biword_alphabet,
-                        self.gaz_alphabet, self.gaz_alphabet_count,self.gaz,max_len)
-                    
+                    if self.args.use_lexicon:
+                        augment_Ids = generate_instance_with_gaz(
+                            bert_token, self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
+                            self.args.gaz_alphabet, self.args.gaz_alphabet_count,self.args.gaz,max_len)
+                    else:
+                        augment_Ids = []
+
                     # 真实标签
                     for event in event_list:
                         event_type = event["event_type"]
@@ -188,9 +186,6 @@ class EeDataset(ListDataset):
 
                 obj_data.append(argu_data)
 
-        print('数据集构建完成')
-        # print(obj_data[:5])
-
         return ner_data if "ner" in tasks else obj_data
 
 
@@ -202,10 +197,12 @@ class EeCollate:
     def __init__(self,
                  max_len,
                  tokenizer,
-                 tasks):
+                 tasks,
+                 args):
         self.maxlen = max_len
         self.tokenizer = tokenizer
         self.tasks = tasks
+        self.args = args
 
     def collate_fn(self, batch):
         batch_ner_token_ids = []
@@ -287,7 +284,9 @@ class EeCollate:
                 batch_ner_start_labels, dtype=torch.float)
             batch_ner_end_labels = convert_list_to_tensor(
                 batch_ner_end_labels, dtype=torch.float)
-            batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
+            
+            if self.args.use_lexicon:
+                batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
 
             ner_res = {
                 "ner_input_ids": batch_ner_token_ids,

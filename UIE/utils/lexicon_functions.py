@@ -195,7 +195,11 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
 
 def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     batch_size = len(input_batch_list)
+    if len(input_batch_list[0]) < 1:
+        return []
+    
     words = [sent[0] for sent in input_batch_list]
     biwords = [sent[1] for sent in input_batch_list]
     matched_gaz_Ids = [sent[2] for sent in input_batch_list]
