@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import BertConfig, BertModel
 from utils.decode import sigmoid
+from utils.lexicon_functions import compile_lexicon_embeddings
 import numpy as np
 class UIEModel(nn.Module):
     def __init__(self, args):
@@ -28,17 +29,15 @@ class UIEModel(nn.Module):
                 args.biword_alphabet.size(), args.biword_emb_dim)
             self.biword_embedding.weight.data.copy_(
                 torch.from_numpy(args.pretrain_biword_embedding))
+                    ### 增加词级别的预训练向量
+            hidden_dim = self.bert_config.hidden_size+self.args.hidden_dim
+        else:
+            hidden_dim = self.bert_config.hidden_size
 
         if "ner" in args.tasks:
             self.ner_num_labels = args.ner_num_labels
             self.module_start_list = nn.ModuleList()
             self.module_end_list = nn.ModuleList()
-
-            ### 增加词级别的预训练向量
-            if self.args.use_lexicon:
-                hidden_dim = self.bert_config.hidden_size+self.args.hidden_dim
-            else:
-                hidden_dim = self.bert_config.hidden_size
 
             for i in range(args.ner_num_labels):
                 self.module_start_list.append(
@@ -49,15 +48,14 @@ class UIEModel(nn.Module):
             self.ner_criterion = nn.BCEWithLogitsLoss()
 
         if "sbj" in args.tasks:
-            self.re_sbj_start_fc = nn.Linear(self.bert_config.hidden_size, 1)
-            self.re_sbj_end_fc = nn.Linear(self.bert_config.hidden_size, 1)
+            self.re_sbj_start_fc = nn.Linear(hidden_dim, 1)
+            self.re_sbj_end_fc = nn.Linear(hidden_dim, 1)
         if "obj" in args.tasks:
-            self.re_obj_start_fc = nn.Linear(self.bert_config.hidden_size, 1)
-            self.re_obj_end_fc = nn.Linear(self.bert_config.hidden_size, 1)
+            self.re_obj_start_fc = nn.Linear(hidden_dim, 1)
+            self.re_obj_end_fc = nn.Linear(hidden_dim, 1)
         if "rel" in args.tasks:
             self.re_num_labels = args.re_num_labels
-            self.re_rel_fc = nn.Linear(
-                self.bert_config.hidden_size, self.re_num_labels)
+            self.re_rel_fc = nn.Linear(hidden_dim, self.re_num_labels)
 
         self.rel_criterion = nn.BCEWithLogitsLoss()
 
@@ -122,7 +120,8 @@ class UIEModel(nn.Module):
                        re_obj_token_type_ids=None,
                        re_obj_attention_mask=None,
                        re_obj_start_labels=None,
-                       re_obj_end_labels=None, ):
+                       re_obj_end_labels=None, 
+                       augment_Ids=None):
         res = {
             "sbj_start_logits": None,
             "sbj_end_logits": None,
@@ -134,8 +133,19 @@ class UIEModel(nn.Module):
             re_obj_attention_mask,
         )
         obj_output = obj_output[0]
-        obj_start_logits = self.re_obj_start_fc(obj_output).squeeze()
-        obj_end_logits = self.re_obj_end_fc(obj_output).squeeze()
+        
+        if self.args.use_lexicon:
+            word_input_cat = compile_lexicon_embeddings(augment_Ids,
+                                                        self.word_embedding,
+                                                        self.biword_embedding,
+                                                        self.gaz_embedding,
+                                                        self.args.use_count)
+            word_input_cat = torch.cat([word_input_cat, obj_output], dim=-1)
+        else:
+            word_input_cat = obj_output
+
+        obj_start_logits = self.re_obj_start_fc(word_input_cat).squeeze()
+        obj_end_logits = self.re_obj_end_fc(word_input_cat).squeeze()
         res["obj_start_logits"] = obj_start_logits
         res["obj_end_logits"] = obj_end_logits
         if re_obj_start_labels is not None and re_obj_end_labels is not None:
@@ -232,31 +242,11 @@ class UIEModel(nn.Module):
         ## 预训练词向量的输出
         ## 1
         if self.args.use_lexicon:
-            gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, \
-            word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask = augment_Ids
-            ## 2
-            batch_size = word_seq_tensor.size()[0]
-            seq_len = word_seq_tensor.size()[1]
-            word_embs = self.word_embedding(word_seq_tensor)
-            biword_embs = self.biword_embedding(biword_seq_tensor)
-            gaz_embeds = self.gaz_embedding(layer_gaz_tensor)
-            # mask复制成与embedding相同的长度
-            ## padding部分全部赋值为0，有必要吗
-            if self.args.use_count:
-                count_sum = torch.sum(gaz_count_tensor, dim=3, keepdim=True)  #(b,l,4,gn)
-                count_sum = torch.sum(count_sum, dim=2, keepdim=True)  #(b,l,1,1)
-                weights = gaz_count_tensor.div(count_sum)  #(b,l,4,g)
-                weights = weights*4
-                weights = weights.unsqueeze(-1)
-                gaz_embeds = weights*gaz_embeds  #(b,l,4,g,e)
-                gaz_embeds = torch.sum(gaz_embeds, dim=3)  #(b,l,4,e)
-            else:
-                gaz_num = (gaz_mask_tensor == 0).sum(dim=-1, keepdim=True).float()  #(b,l,4,1)
-
-                gaz_embeds = gaz_embeds.sum(-2) / gaz_num  #(b,l,4,ge)/(b,l,4,1)
-            word_inputs_d = torch.cat([word_embs,biword_embs],dim=-1)
-            gaz_embeds_cat = gaz_embeds.view(batch_size,seq_len,-1)  #(b,l,4*ge)
-            word_input_cat = torch.cat([word_inputs_d, gaz_embeds_cat], dim=-1)  #(b,l,we+4*ge)
+            word_input_cat = compile_lexicon_embeddings(augment_Ids,
+                                                        self.word_embedding,
+                                                        self.biword_embedding,
+                                                        self.gaz_embedding,
+                                                        self.args.use_count)
             word_input_cat = torch.cat([word_input_cat, seq_bert_output], dim=-1)
         else:
             word_input_cat = seq_bert_output
@@ -386,6 +376,7 @@ class UIEModel(nn.Module):
                 re_obj_attention_mask=re_obj_attention_mask,
                 re_obj_start_labels=re_obj_start_labels,
                 re_obj_end_labels=re_obj_end_labels,
+                augment_Ids=augment_Ids
             )
             res["re_output"] = re_output
 

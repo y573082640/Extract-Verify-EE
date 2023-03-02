@@ -1,6 +1,7 @@
 import json
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
+from utils.question_maker import get_question_for_argument
 from LAC import LAC
 import jieba
 import jieba.posseg as pseg
@@ -25,41 +26,75 @@ def build_gaz_file(gaz_file, gaz, gaz_lower=False):
     return gaz
 
 
+def _generate_questions(event_list):
+    qs = []
+    for tgr_idx, event in enumerate(event_list):
+        event_type = event["event_type"]
+        arguments = event["arguments"]
+
+        for aru_idx, argument in enumerate(arguments):
+            role = argument["role"]
+            question = get_question_for_argument(
+                event_type=event_type, role=role)
+            qs.append(question)
+    return qs
+
+
+def _add_alphabet(text, word_alphabet, biword_alphabet, pos_alphabet, NULLKEY="-null-"):
+    text = list(text)
+    for idx in range(len(text)):
+        w = text[idx]
+        # 单词
+        word_alphabet.add(w)
+        # 双词
+        if idx < len(text) - 1:
+            biword_alphabet.add(w + text[idx+1])
+        else:
+            biword_alphabet.add(w + NULLKEY)
+
+
+def _add_gaz_and_count(text, gaz, gaz_alphabet, gaz_alphabet_count, count):
+    text = list(text)
+    w_length = len(text)
+    entitys = []
+
+    for idx in range(w_length):
+        matched_entity = gaz.enumerateMatchList(text[idx:])
+        entitys += matched_entity
+        for entity in matched_entity:
+            gaz_alphabet.add(entity)
+            index = gaz_alphabet.get_index(entity)
+            gaz_alphabet_count[index] = gaz_alphabet_count.get(
+                index, 0)  # initialize gaz count
+
+    if count:
+        entitys.sort(key=lambda x: -len(x))
+        while entitys:
+            longest = entitys[0]
+            longest_index = gaz_alphabet.get_index(longest)
+            gaz_alphabet_count[longest_index] = gaz_alphabet_count.get(
+                longest_index, 0) + 1
+            gazlen = len(longest)
+            for i in range(gazlen):
+                for j in range(i+1, gazlen+1):
+                    covering_gaz = longest[i:j]
+                    if covering_gaz in entitys:
+                        entitys.remove(covering_gaz)
+
+
 def build_gaz_alphabet(input_file, gaz, gaz_alphabet, gaz_alphabet_count, count=False):
     in_lines = open(input_file, 'r', encoding="utf-8").readlines()
     for line in in_lines:
         d = json.loads(line)
         text = d['text']
-        text = list(text)
-        # BERT
-        # text = ['[CLS]'] + text + ['[SEP]']
-        w_length = len(text)
-        entitys = []
+        questions = _generate_questions(d["event_list"])
 
-        for idx in range(w_length):
-            matched_entity = gaz.enumerateMatchList(text[idx:])
-            entitys += matched_entity
-            for entity in matched_entity:
-                gaz_alphabet.add(entity)
-                index = gaz_alphabet.get_index(entity)
-                gaz_alphabet_count[index] = gaz_alphabet_count.get(
-                    index, 0)  # initialize gaz count
-
-        if count:
-            entitys.sort(key=lambda x: -len(x))
-            while entitys:
-                longest = entitys[0]
-                longest_index = gaz_alphabet.get_index(longest)
-                gaz_alphabet_count[longest_index] = gaz_alphabet_count.get(
-                    longest_index, 0) + 1
-                gazlen = len(longest)
-                for i in range(gazlen):
-                    for j in range(i+1, gazlen+1):
-                        covering_gaz = longest[i:j]
-                        if covering_gaz in entitys:
-                            entitys.remove(covering_gaz)
+        _add_gaz_and_count(text, gaz, gaz_alphabet, gaz_alphabet_count, count)
+        for q in questions:
+            _add_gaz_and_count(q, gaz, gaz_alphabet, gaz_alphabet_count, count)
 
     print("gaz alphabet size:", gaz_alphabet.size())
+
     return gaz_alphabet, gaz_alphabet_count
 
 
@@ -68,24 +103,19 @@ def build_alphabet(input_file, word_alphabet, biword_alphabet, pos_alphabet, NUL
     for line in in_lines:
         d = json.loads(line)
         text = d['text']
+        questions = _generate_questions(d["event_list"])
         # words_and_flags = pseg.cut(text)  # jieba默认模式
         # for w, f in words_and_flags:
         #     pos_alphabet.add(f)
 
-        text = list(text)
+        _add_alphabet(text, word_alphabet, biword_alphabet,
+                      pos_alphabet, NULLKEY)
+        for q in questions:
+            _add_alphabet(q, word_alphabet, biword_alphabet,
+                          pos_alphabet, NULLKEY)
 
         # BERT形式
         # text = ['[CLS]'] + text + ['[SEP]']
-
-        for idx in range(len(text)):
-            w = text[idx]
-            # 单词
-            word_alphabet.add(w)
-            # 双词
-            if idx < len(text) - 1:
-                biword_alphabet.add(w + text[idx+1])
-            else:
-                biword_alphabet.add(w + NULLKEY)
 
     return word_alphabet, biword_alphabet, pos_alphabet
 
@@ -104,7 +134,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
     biwords = []  # 双词
     word_Ids = []  # 单词转为id（词表中）
     biword_Ids = []  # 双词转为id（词表中）
-    # TODO:pos 
+    # TODO:pos
     # words_and_flags = pseg.cut(text)  # jieba默认模式
     # for w, f in words_and_flags:
     #     f_index = pos_alphabet.get_index(f)
@@ -138,26 +168,37 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
         matched_Ids = [gaz_alphabet.get_index(
             entity) for entity in matched_entitys]
         matched_lengths = [len(entity) for entity in matched_entitys]
+        try:
+            for entity_idx in range(len(matched_Ids)):
+                id = matched_Ids[entity_idx]
+                w_len = matched_lengths[entity_idx]
 
-        for entity_idx in range(len(matched_Ids)):
-            id = matched_Ids[entity_idx]
-            w_len = matched_lengths[entity_idx]
+                if w_len == 1:  # Single
+                    gazs[idx][3].append(id)
+                    gazs_count[idx][3].append(1)
+                else:
+                    gazs[idx][0].append(id)  # Begin
+                    gazs_count[idx][0].append(gaz_alphabet_count[id])
 
-            if w_len == 1:  # Single
-                gazs[idx][3].append(id)
-                gazs_count[idx][3].append(1)
-            else:
-                gazs[idx][0].append(id)  # Begin
-                gazs_count[idx][0].append(gaz_alphabet_count[id])
+                    gazs[idx + w_len - 1][2].append(id)  # End
+                    # End
+                    gazs_count[idx + w_len -
+                               1][2].append(gaz_alphabet_count[id])
 
-                gazs[idx + w_len - 1][2].append(id)  # End
-                # End
-                gazs_count[idx + w_len - 1][2].append(gaz_alphabet_count[id])
-
-                for l in range(1, w_len-1):
-                    gazs[idx + l][1].append(id)  # M
-                    # M
-                    gazs_count[idx + l][1].append(gaz_alphabet_count[id])
+                    for l in range(1, w_len-1):
+                        gazs[idx + l][1].append(id)  # M
+                        # M
+                        gazs_count[idx + l][1].append(gaz_alphabet_count[id])
+        except Exception as e:
+            print(text)
+            print(text[idx:])
+            print(matched_entitys)
+            print(id)
+            with open('log/argu_badcase.txt', 'w') as file_object:
+                file_object.write(str(gaz_alphabet_count.keys()) + "\n")
+            print(1 in gaz_alphabet_count.keys())
+            print("1" in gaz_alphabet_count.keys())
+            exit(0)
 
         for label in range(4):  # NULLKEY
             if not gazs[idx][label]:
@@ -199,7 +240,7 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     batch_size = len(input_batch_list)
     if len(input_batch_list[0]) < 1:
         return []
-    
+
     words = [sent[0] for sent in input_batch_list]
     biwords = [sent[1] for sent in input_batch_list]
     matched_gaz_Ids = [sent[2] for sent in input_batch_list]
@@ -213,7 +254,7 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     word_pos_tensor = torch.zeros((batch_size, max_len)).long()
     word_seq_tensor = torch.zeros((batch_size, max_len)).long()
     biword_seq_tensor = torch.zeros((batch_size, max_len)).long()
-    mask = torch.zeros((batch_size, max_len),dtype=torch.bool)
+    mask = torch.zeros((batch_size, max_len), dtype=torch.bool)
 
     # gaz单词级别
     # 第i段文本第0个词的第0个label，文本内的label已经对齐了
@@ -221,7 +262,8 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     max_gaz_num = max(gaz_num)
     layer_gaz_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num).long()
     gaz_count_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num).long()
-    gaz_mask_tensor = torch.zeros(batch_size, max_len, 4, max_gaz_num,dtype=torch.bool)
+    gaz_mask_tensor = torch.zeros(
+        batch_size, max_len, 4, max_gaz_num, dtype=torch.bool)
 
     for b, (seq, pos, biseq, seqlen, layergaz, gazmask, gazcount, gaznum) \
             in enumerate(zip(words, word_pos, biwords, word_seq_lengths, gazs, gaz_mask, gaz_count, gaz_num)):
@@ -241,6 +283,8 @@ def batchify_augment_ids(input_batch_list, max_len, volatile_flag=False):
     biword_seq_tensor = biword_seq_tensor.to(device)
     layer_gaz_tensor = layer_gaz_tensor.to(device)
     gaz_count_tensor = gaz_count_tensor.to(device)
+    gaz_num = torch.tensor(gaz_num, dtype=torch.long)
+    gaz_num = gaz_num.to(device)
 
     return [gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask]
 
@@ -314,3 +358,35 @@ def build_biword_pretrain_emb(file_path, biword_alphabet, biword_emb_dim, norm_b
 def build_gaz_pretrain_emb(file_path, gaz_alphabet, gaz_emb_dim, norm_gaz_emb):
     print("build gaz pretrain emb...")
     return build_pretrain_embedding(file_path, gaz_alphabet, gaz_emb_dim, norm_gaz_emb)
+
+
+def compile_lexicon_embeddings(augment_Ids, word_embedding, biword_embedding, gaz_embedding, use_count):
+    gazs, word_seq_tensor, biword_seq_tensor, word_pos_tensor, \
+        word_seq_lengths, layer_gaz_tensor, gaz_count_tensor, gaz_mask_tensor, mask = augment_Ids
+    # 2
+    batch_size = word_seq_tensor.size()[0]
+    seq_len = word_seq_tensor.size()[1]
+    word_embs = word_embedding(word_seq_tensor)
+    biword_embs = biword_embedding(biword_seq_tensor)
+    gaz_embeds = gaz_embedding(layer_gaz_tensor)
+    # mask复制成与embedding相同的长度
+    # padding部分全部赋值为0，有必要吗
+    if use_count:
+        count_sum = torch.sum(gaz_count_tensor, dim=3,
+                              keepdim=True)  # (b,l,4,gn)
+        count_sum = torch.sum(count_sum, dim=2, keepdim=True)  # (b,l,1,1)
+        weights = gaz_count_tensor.div(count_sum)  # (b,l,4,g)
+        weights = weights*4
+        weights = weights.unsqueeze(-1)
+        gaz_embeds = weights*gaz_embeds  # (b,l,4,g,e)
+        gaz_embeds = torch.sum(gaz_embeds, dim=3)  # (b,l,4,e)
+    else:
+        gaz_num = (gaz_mask_tensor == 0).sum(
+            dim=-1, keepdim=True).float()  # (b,l,4,1)
+        gaz_embeds = gaz_embeds.sum(-2) / gaz_num  # (b,l,4,ge)/(b,l,4,1)
+
+    word_inputs_d = torch.cat([word_embs, biword_embs], dim=-1)
+    gaz_embeds_cat = gaz_embeds.view(batch_size, seq_len, -1)  # (b,l,4*ge)
+    word_input_cat = torch.cat(
+        [word_inputs_d, gaz_embeds_cat], dim=-1)  # (b,l,we+4*ge)
+    return word_input_cat

@@ -92,6 +92,7 @@ class EePipeline:
                                     re_sbj_attention_mask=batch_data["re_sbj_attention_mask"],
                                     re_sbj_start_labels=batch_data["re_sbj_start_labels"],
                                     re_sbj_end_labels=batch_data["re_sbj_end_labels"],
+                                    augment_Ids=batch_data["batch_augment_Ids"]
                                     )
                 start_logits = output["re_output"]["sbj_start_logits"].detach(
                 ).cpu()
@@ -108,6 +109,7 @@ class EePipeline:
                                     re_obj_attention_mask=batch_data["re_obj_attention_mask"],
                                     re_obj_start_labels=batch_data["re_obj_start_labels"],
                                     re_obj_end_labels=batch_data["re_obj_end_labels"],
+                                    augment_Ids=batch_data["batch_augment_Ids"]
                                     )
                 start_logits = output["re_output"]["obj_start_logits"].detach(
                 ).cpu()
@@ -458,6 +460,7 @@ class EePipeline:
                         re_obj_attention_mask=batch_data["re_obj_attention_mask"],
                         re_obj_start_labels=batch_data["re_obj_start_labels"],
                         re_obj_end_labels=batch_data["re_obj_end_labels"],
+                        augment_Ids=batch_data["batch_augment_Ids"]
                     )
                     loss = output["re_output"]["obj_loss"]
 

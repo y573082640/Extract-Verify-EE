@@ -117,8 +117,7 @@ class EeDataset(ListDataset):
             print('文本embedding构造完毕')
             # 此处用训练集作为demo库
             print('...构造提示库embedding')
-            demo_embs, demo_tuples = sim_scorer.create_embs_and_tuples(
-                '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_train.json')
+            demo_embs, demo_tuples = sim_scorer.create_embs_and_tuples(self.args.demo_path)
             print('提示库embedding构造完毕')
             most_sim = sim_scorer.sim_match(
                 embs, demo_embs)  # {corpus_id,score}
@@ -159,6 +158,20 @@ class EeDataset(ListDataset):
                 else:
                     argu_token = pre_tokens + text_tokens
                 argu_token = ['[CLS]'] + argu_token + ['[SEP]']
+
+                if self.args.use_lexicon:
+                    augment_Ids = generate_instance_with_gaz(
+                        argu_token, 
+                        self.args.pos_alphabet, 
+                        self.args.word_alphabet, 
+                        self.args.biword_alphabet,
+                        self.args.gaz_alphabet, 
+                        self.args.gaz_alphabet_count,
+                        self.args.gaz,
+                        max_len)
+                else:
+                    augment_Ids = []
+
                 argu_start_labels = [0] * len(argu_token)
                 argu_end_labels = [0] * len(argu_token)
 
@@ -182,10 +195,12 @@ class EeDataset(ListDataset):
                     "obj_tokens": argu_token,
                     "obj_start_labels": argu_start_labels,
                     "obj_end_labels": argu_end_labels,
+                    "augment_Ids":augment_Ids
                 }
 
                 obj_data.append(argu_data)
-
+                
+        print("数据集构建完毕")
         return ner_data if "ner" in tasks else obj_data
 
 
@@ -219,6 +234,9 @@ class EeCollate:
         batch_augment_Ids = []
         for i, data in enumerate(batch):
 
+            augment_Ids = data["augment_Ids"]
+            batch_augment_Ids.append(augment_Ids)
+
             if "ner" in self.tasks:
                 ner_token_type_ids = [0] * self.maxlen
                 ner_tokens = data["ner_tokens"]
@@ -226,7 +244,7 @@ class EeCollate:
                 ner_tokens = self.tokenizer.convert_tokens_to_ids(ner_tokens)
                 ner_start_labels = data["ner_start_labels"]
                 ner_end_labels = data["ner_end_labels"]
-                augment_Ids = data["augment_Ids"]
+                
                 # 对齐操作
                 if len(ner_tokens) < self.maxlen:
                     # 第0个token的第0个gaz列表长度
@@ -243,7 +261,7 @@ class EeCollate:
                 batch_ner_start_labels.append(ner_start_labels)
                 batch_ner_end_labels.append(ner_end_labels)
                 batch_raw_tokens.append(raw_tokens)
-                batch_augment_Ids.append(augment_Ids)
+                
 
             elif "obj" in self.tasks:
                 obj_tokens = data["obj_tokens"]
@@ -284,9 +302,6 @@ class EeCollate:
                 batch_ner_start_labels, dtype=torch.float)
             batch_ner_end_labels = convert_list_to_tensor(
                 batch_ner_end_labels, dtype=torch.float)
-            
-            if self.args.use_lexicon:
-                batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
 
             ner_res = {
                 "ner_input_ids": batch_ner_token_ids,
@@ -294,7 +309,6 @@ class EeCollate:
                 "ner_token_type_ids": batch_ner_token_type_ids,
                 "ner_start_labels": batch_ner_start_labels,
                 "ner_end_labels": batch_ner_end_labels,
-                "batch_augment_Ids": batch_augment_Ids
             }
 
             res = ner_res
@@ -309,6 +323,7 @@ class EeCollate:
                 batch_obj_start_labels, dtype=torch.float)
             batch_obj_end_labels = convert_list_to_tensor(
                 batch_obj_end_labels, dtype=torch.float)
+
             sbj_obj_res = {
                 "re_obj_input_ids": batch_obj_token_ids,
                 "re_obj_attention_mask": batch_obj_attention_mask,
@@ -319,7 +334,12 @@ class EeCollate:
 
             res = sbj_obj_res
 
+        ### 用于错误输出
         res['raw_tokens'] = batch_raw_tokens
+        ### 用于词典增强
+        if self.args.use_lexicon:
+            batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
+        res['batch_augment_Ids'] = batch_augment_Ids
 
         return res
 
