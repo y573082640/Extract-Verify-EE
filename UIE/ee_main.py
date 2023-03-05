@@ -1,3 +1,4 @@
+import logging
 import sys
 
 sys.path.append('..')
@@ -436,8 +437,6 @@ class EePipeline:
         self.model.to(self.args.device)
         eval_step = self.args.eval_step
         best_f1 = 0.
-        with open('log/trigger_train_log.txt', 'w') as file_object:
-            file_object.write(str(time.time()) + "\n")
         for epoch in range(1, self.args.train_epoch + 1):
             for step, batch_data in enumerate(train_loader):
                 self.model.train()
@@ -477,33 +476,24 @@ class EePipeline:
                     if "ner" in self.args.tasks:
                         metrics = self.eval_forward(
                             dev_loader, self.args.entity_label, self.args.ent_id2label)
-                        ner_metrics = metrics["ner_metrics"]
-                        with open('log/trigger_train_log.txt', 'a') as file_object:
-                            file_object.write('【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(ner_metrics["precision"],
-                                                                                             ner_metrics["recall"],
-                                                                                             ner_metrics["f1"]) + "\n")
-
-                        print('【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(ner_metrics["precision"],
-                                                                                             ner_metrics["recall"],
-                                                                                             ner_metrics["f1"]))
-                        if ner_metrics["f1"] > best_f1:
-                            best_f1 = ner_metrics["f1"]
-                            print("【best_f1】：{}".format(best_f1))
-                            self.save_model()
+                        metrics = metrics["ner_metrics"]
 
                     elif "obj" in self.args.tasks:
                         label = ["答案"]
                         id2label = {0: "答案"}
                         metrics = self.bj_eval_forward(
                             dev_loader, label, id2label)
-                        bj_metrics = metrics["bj_metrics"]
-                        print('【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(bj_metrics["precision"],
-                                                                                             bj_metrics["recall"],
-                                                                                             bj_metrics["f1"]))
-                        if bj_metrics["f1"] > best_f1:
-                            best_f1 = bj_metrics["f1"]
-                            print("【best_f1】：{}".format(best_f1))
-                            self.save_model()
+                        metrics = metrics["bj_metrics"]
+
+                    output_info = '【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(metrics["precision"],
+                                                                                             metrics["recall"],
+                                                                                             metrics["f1"])
+                    logging.info(output_info)
+                    print(output_info)
+                    if metrics["f1"] > best_f1:
+                        best_f1 = metrics["f1"]
+                        print("【best_f1】：{}".format(best_f1))
+                        self.save_model()
 
     def test(self):
         test_dataset = EeDataset(file_path=self.args.test_path,
@@ -526,21 +516,22 @@ class EePipeline:
             if "ner" in self.args.tasks:
                 metrics = self.eval_forward(
                     test_loader, self.args.entity_label, self.args.ent_id2label, return_report=True)
-                ner_metrics = metrics["ner_metrics"]
-                print('【test】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(ner_metrics["precision"],
-                                                                                     ner_metrics["recall"],
-                                                                                     ner_metrics["f1"]))
-                print(ner_metrics["report"])
+                metrics = metrics["ner_metrics"]
+
             elif "obj" in self.args.tasks:
                 label = ["答案"]
                 id2label = {0: "答案"}
                 metrics = self.bj_eval_forward(
                     test_loader, label, id2label, return_report=True)
-                bj_metrics = metrics["bj_metrics"]
-                print('【test】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(bj_metrics["precision"],
-                                                                                     bj_metrics["recall"],
-                                                                                     bj_metrics["f1"]))
-                print(bj_metrics["report"])
+                metrics = metrics["bj_metrics"]
+
+            output_info = '【test】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(metrics["precision"],
+                                                                                    metrics["recall"],
+                                                                                    metrics["f1"])
+            logging.info(output_info)
+            logging.info(metrics["report"])
+            print(output_info)
+            print(metrics["report"])
 
     def predict(self, textb, texta=None):
         self.model.eval()

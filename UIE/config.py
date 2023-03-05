@@ -3,101 +3,133 @@ from transformers import BertTokenizer
 from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, build_gaz_pretrain_emb, build_biword_pretrain_emb, build_word_pretrain_emb
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
+from utils.logging import logger_init
+import logging
 import os
 import numpy as np
 
+
 class EeArgs:
-    tasks = ["obj"]
-    data_name = "duee"
-    data_dir = "ee"
-    bert_dir = "model_hub/chinese-bert-wwm-ext/"
-    save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(
-        data_dir, tasks[0], data_name)
-    train_path = "./data/{}/{}/duee_train.json".format(data_dir, data_name)
-    dev_path = "./data/{}/{}/duee_dev.json".format(data_dir, data_name)
-    test_path = "./data/{}/{}/duee_dev.json".format(data_dir, data_name)
-    label_path = "./data/{}/{}/labels.txt".format(data_dir, data_name)
-    demo_path = "./data/{}/{}/duee_train.json".format(data_dir, data_name)
-    ignore_key = ['raw_tokens', 'batch_augment_Ids']
-    with open(label_path, "r") as fp:
-        entity_label = fp.read().strip().split("\n")
-    ent_label2id = {}
-    ent_id2label = {}
-    for i, label in enumerate(entity_label):
-        ent_label2id[label] = i
-        ent_id2label[i] = label
-    ner_num_labels = len(entity_label)
-    train_epoch = 20
-    train_batch_size = 32
-    eval_batch_size = 32
-    eval_step = 500
-    max_seq_len = 256
-    weight_decay = 0.01
-    adam_epsilon = 1e-8
-    max_grad_norm = 5.0
-    lr = 3e-5
-    other_lr = 3e-4
-    warmup_proportion = 0.01
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # device = torch.device("cpu")
-    tokenizer = BertTokenizer.from_pretrained(bert_dir)
-    tokenizer.add_special_tokens(
-        {'additional_special_tokens': ['[DEMO]', '[ARG]', '[TGR]']})
-    # 下面是lexicon的
-    # 完成alphabet构建
-    use_lexicon = False
-    use_count=True
-    word_emb_dim = 50
-    biword_emb_dim = 50
-    gaz_emb_dim = 50
-    pos_emb_dim = 24
-    hidden_dim = word_emb_dim + biword_emb_dim + 4 * gaz_emb_dim #TODO:加上pos_emb
-    gaz_dropout = 0.5
-    norm_word_emb = True
-    norm_biword_emb = True
-    norm_gaz_emb = False
-    char_emb = "./data/embs/gigaword_chn.all.a2b.uni.ite50.vec"
-    bichar_emb = "./data/embs/gigaword_chn.all.a2b.bi.ite50.vec"
-    gaz_file = "./data/embs/ctb.50d.vec"
-    word_alphabet = Alphabet('word')  # 单字
-    biword_alphabet = Alphabet('biword')  # 双字
-    pos_alphabet = Alphabet('pos')  # 双字
-    gaz_lower = False
-    gaz = Gazetteer(gaz_lower)
-    gaz_alphabet = Alphabet('gaz')
-    gaz_alphabet_count = {}
-    gaz_alphabet_count[1] = 0
-    build_gaz_file(gaz_file, gaz)
-    for filename in [train_path, dev_path, test_path]:
-        build_alphabet(filename, word_alphabet, biword_alphabet, pos_alphabet)
-        build_gaz_alphabet(filename, gaz, gaz_alphabet, gaz_alphabet_count, count=use_count)
+    def __init__(self):
+        self.tasks = ["ner"]
+        self.data_name = "duee"
+        self.data_dir = "ee"
+        self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
+        self.save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(
+            self.data_dir, self.tasks[0], self.data_name)
+        self.train_path = "./data/{}/{}/duee_train.json".format(
+            self.data_dir, self.data_name)
+        self.dev_path = "./data/{}/{}/duee_dev.json".format(
+            self.data_dir, self.data_name)
+        self.test_path = "./data/{}/{}/duee_dev.json".format(
+            self.data_dir, self.data_name)
+        self.label_path = "./data/{}/{}/labels.txt".format(
+            self.data_dir, self.data_name)
+        self.demo_path = "./data/{}/{}/duee_train.json".format(
+            self.data_dir, self.data_name)
+        self.ignore_key = ['raw_tokens', 'batch_augment_Ids']
+        with open(self.label_path, "r") as fp:
+            self.entity_label = fp.read().strip().split("\n")
+        self.ent_label2id = {}
+        self.ent_id2label = {}
+        for i, label in enumerate(self.entity_label):
+            self.ent_label2id[label] = i
+            self.ent_id2label[i] = label
+        self.ner_num_labels = len(self.entity_label)
+        self.train_epoch = 20
+        self.train_batch_size = 32
+        self.eval_batch_size = 32
+        self.eval_step = 500
+        self.max_seq_len = 256
+        self.weight_decay = 0.01
+        self.adam_epsilon = 1e-8
+        self.max_grad_norm = 5.0
+        self.lr = 3e-5
+        self.other_lr = 3e-4
+        self.warmup_proportion = 0.01
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+        # device = torch.device("cpu")
+        self.tokenizer = BertTokenizer.from_pretrained(self.bert_dir)
+        self.tokenizer.add_special_tokens(
+            {'additional_special_tokens': ['[DEMO]', '[ARG]', '[TGR]']})
+        # 下面是lexicon的
+        # 完成alphabet构建
+        self.use_lexicon = True
+        self.use_count = True
+        self.gaz_lower = False
+        self.word_emb_dim = 50
+        self.biword_emb_dim = 50
+        self.gaz_emb_dim = 50
+        self.pos_emb_dim = 24
+        self.gaz_dropout = 0.5
+        self.norm_word_emb = True
+        self.norm_biword_emb = True
+        self.norm_gaz_emb = False
+        self.char_emb = "./data/embs/gigaword_chn.all.a2b.uni.ite50.vec"
+        self.bichar_emb = "./data/embs/gigaword_chn.all.a2b.bi.ite50.vec"
+        self.gaz_file = "./data/embs/tencent-d200/tencent-ailab-embedding-zh-d200-v0.2.0-s.txt"
+        self.logs_save_dir = 'log'
+        logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
+                    log_dir=self.logs_save_dir,
+                    only_file=False)
+        logging.info("\n\n\n\n\n########  <----------------------->")
+        for key, value in self.__dict__.items():
+            logging.info(f"########  {key} = {value}")
 
-    ### 停止自动增长
-    word_alphabet.keep_growing = False
-    biword_alphabet.keep_growing = False
-    pos_alphabet.keep_growing = False
-    gaz_alphabet.keep_growing = False
-    print("-词典和字母表构建完毕-")
+        if self.use_lexicon:
+            self.word_alphabet = Alphabet('word')  # 单字
+            self.biword_alphabet = Alphabet('biword')  # 双字
+            self.pos_alphabet = Alphabet('pos')  # 双字
+            self.gaz = Gazetteer(self.gaz_lower)
+            self.gaz_alphabet = Alphabet('gaz')
+            self.gaz_alphabet_count = {}
+            self.gaz_alphabet_count[1] = 0
+            self.init_lexicon()
 
-    if os.path.exists('./storage/word_embedding.npy'):
-        pretrain_word_embedding = np.load('storage/word_embedding.npy')
-    else:
-        pretrain_word_embedding,word_emb_dim = build_word_pretrain_emb(char_emb,word_alphabet,word_emb_dim,norm_word_emb)
-        np.save('storage/word_embedding.npy',pretrain_word_embedding)
+    def init_lexicon(self):
+        build_gaz_file(self.gaz_file, self.gaz)
+        for filename in [self.train_path, self.dev_path, self.test_path]:
+            build_alphabet(filename, self.word_alphabet,
+                           self.biword_alphabet, self.pos_alphabet)
+            build_gaz_alphabet(filename, self.gaz, self.gaz_alphabet,
+                               self.gaz_alphabet_count, count=self.use_count)
 
-    if os.path.exists('./storage/biword_embedding.npy'):
-        pretrain_biword_embedding = np.load('storage/biword_embedding.npy')
-    else:
-        pretrain_biword_embedding,biword_emb_dim = build_biword_pretrain_emb(bichar_emb,biword_alphabet,biword_emb_dim,norm_biword_emb)
-        np.save('storage/biword_embedding.npy',pretrain_biword_embedding)
+        # 停止自动增长
+        self.word_alphabet.keep_growing = False
+        self.biword_alphabet.keep_growing = False
+        self.pos_alphabet.keep_growing = False
+        self.gaz_alphabet.keep_growing = False
+        print("-词典和字母表构建完毕-")
 
-    if os.path.exists('./storage/gaz_embedding.npy'):
-        pretrain_gaz_embedding = np.load('storage/gaz_embedding.npy')
-    else:
-        pretrain_gaz_embedding,gaz_emb_dim = build_gaz_pretrain_emb(gaz_file,gaz_alphabet,gaz_emb_dim,norm_gaz_emb)
-        np.save('storage/gaz_embedding.npy',pretrain_gaz_embedding)
-    
-    print("-预训练向量加载完毕-")
+        if os.path.exists('./storage/word_embedding.npy'):
+            self.pretrain_word_embedding = np.load(
+                'storage/word_embedding.npy')
+        else:
+            self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
+                self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)
+            np.save('storage/word_embedding.npy', self.pretrain_word_embedding)
+
+        if os.path.exists('./storage/biword_embedding.npy'):
+            self.pretrain_biword_embedding = np.load(
+                'storage/biword_embedding.npy')
+        else:
+            self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
+                self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)
+            np.save('storage/biword_embedding.npy',
+                    self.pretrain_biword_embedding)
+
+        if os.path.exists('./storage/gaz_embedding.npy'):
+            self.pretrain_gaz_embedding = np.load('storage/gaz_embedding.npy')
+        else:
+            self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
+                self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
+            np.save('storage/gaz_embedding.npy', self.pretrain_gaz_embedding)
+
+        self.hidden_dim = self.word_emb_dim + self.biword_emb_dim + \
+            4 * self.gaz_emb_dim  # TODO:加上pos_emb
+        print("-预训练向量加载完毕-维数为：" + str(self.hidden_dim))
+
 
 class NerArgs:
     tasks = ["ner"]
