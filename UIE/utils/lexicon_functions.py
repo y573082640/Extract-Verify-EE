@@ -168,37 +168,27 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
         matched_Ids = [gaz_alphabet.get_index(
             entity) for entity in matched_entitys]
         matched_lengths = [len(entity) for entity in matched_entitys]
-        try:
-            for entity_idx in range(len(matched_Ids)):
-                id = matched_Ids[entity_idx]
-                w_len = matched_lengths[entity_idx]
+        for entity_idx in range(len(matched_Ids)):
+            id = matched_Ids[entity_idx]
+            w_len = matched_lengths[entity_idx]
 
-                if w_len == 1:  # Single
-                    gazs[idx][3].append(id)
-                    gazs_count[idx][3].append(1)
-                else:
-                    gazs[idx][0].append(id)  # Begin
-                    gazs_count[idx][0].append(gaz_alphabet_count[id])
+            if w_len == 1:  # Single
+                gazs[idx][3].append(id)
+                gazs_count[idx][3].append(1)
+            else:
+                gazs[idx][0].append(id)  # Begin
+                gazs_count[idx][0].append(gaz_alphabet_count[id])
 
-                    gazs[idx + w_len - 1][2].append(id)  # End
-                    # End
-                    gazs_count[idx + w_len -
-                               1][2].append(gaz_alphabet_count[id])
+                gazs[idx + w_len - 1][2].append(id)  # End
+                # End
+                gazs_count[idx + w_len -
+                            1][2].append(gaz_alphabet_count[id])
 
-                    for l in range(1, w_len-1):
-                        gazs[idx + l][1].append(id)  # M
-                        # M
-                        gazs_count[idx + l][1].append(gaz_alphabet_count[id])
-        except Exception as e:
-            print(text)
-            print(text[idx:])
-            print(matched_entitys)
-            print(id)
-            with open('log/argu_badcase.txt', 'w') as file_object:
-                file_object.write(str(gaz_alphabet_count.keys()) + "\n")
-            print(1 in gaz_alphabet_count.keys())
-            print("1" in gaz_alphabet_count.keys())
-            exit(0)
+                for l in range(1, w_len-1):
+                    gazs[idx + l][1].append(id)  # M
+                    # M
+                    gazs_count[idx + l][1].append(gaz_alphabet_count[id])
+
 
         for label in range(4):  # NULLKEY
             if not gazs[idx][label]:
@@ -212,6 +202,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
         else:
             matched_gaz_Ids.append([])
 
+    ### TODO:这里还需要吗，已经对齐到max_len了
     for idx in range(len(text)):
         gazmask = []  # 对某个tokend的mask
 

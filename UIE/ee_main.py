@@ -12,7 +12,7 @@ from UIE.model import UIEModel
 from UIE.config import EeArgs
 from UIE.ee_data_loader import EeDataset, EeCollate
 from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
-from UIE.utils.metrics import calculate_metric, classification_report, get_p_r_f
+from UIE.utils.metrics import calculate_metric,word_level_calculate_metric, classification_report, get_p_r_f, get_argu_p_r_f
 
 
 
@@ -239,7 +239,7 @@ class EePipeline:
         role_metric, total_count = self.get_bj_metrics_helper(
             bj_outputs, id2label, return_report)
         mirco_metrics = np.sum(role_metric, axis=0)
-        mirco_metrics = get_p_r_f(
+        mirco_metrics = get_argu_p_r_f(
             mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
         res = {
             "precision": mirco_metrics[0],
@@ -296,8 +296,8 @@ class EePipeline:
                 if _type not in pred_entities:
                     pred_entities[_type] = []
                 total_count[idx] += len(true_entities[_type])
-                role_metric[idx] += calculate_metric(
-                    pred_entities[_type], true_entities[_type])
+                role_metric[idx] += word_level_calculate_metric(
+                    pred_entities[_type], true_entities[_type], text)
 
         return role_metric, total_count
 
@@ -395,7 +395,7 @@ class EePipeline:
                 total_count[idx] += len(true_entities[_type])
                 ### pred_entities[_type] = [(start_index,end_index+1)...]
                 role_metric[idx] += calculate_metric(
-                    pred_entities[_type], true_entities[_type])
+                    pred_entities[_type], true_entities[_type], text)
 
         return role_metric, total_count
 

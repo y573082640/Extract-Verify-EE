@@ -45,7 +45,7 @@ class EeArgs:
         {'additional_special_tokens': ['[DEMO]', '[ARG]', '[TGR]']})
     # 下面是lexicon的
     # 完成alphabet构建
-    use_lexicon = True
+    use_lexicon = False
     use_count=True
     word_emb_dim = 50
     biword_emb_dim = 50
