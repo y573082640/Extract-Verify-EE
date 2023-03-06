@@ -263,8 +263,6 @@ class EePipeline:
         e_label = outputs["end_labels"]
         masks = outputs["masks"]
         raw_tokens = outputs["raw_tokens"]
-        with open('log/argu_badcase.txt', 'w') as file_object:
-            file_object.write(str(time.time()) + "\n")
         for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):
             length = sum(mask)
             pred_entities = bj_decode(s_logit, e_logit, length, id2label)
@@ -275,23 +273,22 @@ class EePipeline:
             # print("========================")
             if return_report:
                 if str(pred_entities) != str(true_entities):
-                    with open('log/argu_badcase.txt', 'a') as file_object:
-                        file_object.write("========================" + "\n")
-                        file_object.write(''.join(text) + "\n")
-                        file_object.write('真实' + "\n")
-                        for key in true_entities.keys():
-                            if len(true_entities[key]) > 0:
-                                for s_t_tuple in true_entities[key]:
-                                    file_object.write(
-                                        key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
+                    logging.debug("========================")
+                    logging.debug(''.join(text))
+                    logging.debug('真实')
+                    for key in true_entities.keys():
+                        if len(true_entities[key]) > 0:
+                            for s_t_tuple in true_entities[key]:
+                                logging.debug(
+                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
-                        file_object.write('预测' + "\n")
-                        for key in pred_entities.keys():
-                            if len(pred_entities[key]) > 0:
-                                for s_t_tuple in pred_entities[key]:
-                                    file_object.write(
-                                        key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
-                        file_object.write("========================" + "\n")
+                    logging.debug('预测')
+                    for key in pred_entities.keys():
+                        if len(pred_entities[key]) > 0:
+                            for s_t_tuple in pred_entities[key]:
+                                logging.debug(
+                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
+                    logging.debug("========================")
 
             for idx, _type in enumerate(list(id2label.values())):
                 if _type not in pred_entities:
@@ -372,22 +369,21 @@ class EePipeline:
             # print("========================")
             if return_report:
                 if str(pred_entities) != str(true_entities):
-                    with open('log/trigger_badcase.txt', 'a') as file_object:
-                        file_object.write("========================" + "\n")
-                        file_object.write(''.join(text) + "\n")
-                        file_object.write('真实' + "\n")
-                        for key in true_entities.keys():
-                            if len(true_entities[key]) > 0:
-                                for s_t_tuple in true_entities[key]:
-                                    file_object.write(
-                                        key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
+                    logging.debug("<========================>")
+                    logging.debug(''.join(text))
+                    logging.debug('=============>')
+                    for key in true_entities.keys():
+                        if len(true_entities[key]) > 0:
+                            for s_t_tuple in true_entities[key]:
+                                logging.debug(
+                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
-                        file_object.write('预测' + "\n")
-                        for key in pred_entities.keys():
-                            if len(pred_entities[key]) > 0:
-                                for s_t_tuple in pred_entities[key]:
-                                    file_object.write(
-                                        key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]) + '\n')
+                    logging.debug('<=============')
+                    for key in pred_entities.keys():
+                        if len(pred_entities[key]) > 0:
+                            for s_t_tuple in pred_entities[key]:
+                                logging.debug(
+                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
             # 对第i条数据，计算每个事件类型的预测结果
             for idx, _type in enumerate(self.args.entity_label):
@@ -608,22 +604,23 @@ class EePipeline:
 
 
 if __name__ == '__main__':
-    args = EeArgs()
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
+    for h_dim in [50,100,200]:
+        args = EeArgs(use_lexicon=True,gaz_dim=h_dim)
+        model = UIEModel(args)
+        ee_pipeline = EePipeline(model, args)
 
-    ee_pipeline.train()
-    ee_pipeline.test()
+        ee_pipeline.train()
+        ee_pipeline.test()
 
-    ee_pipeline.load_model()
-    if "ner" in args.tasks:
-        raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-        print(raw_text)
-        print(ee_pipeline.predict(raw_text))
-    elif "obj" in args.tasks:
-        textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-        texta = "组织关系-裁员_裁员人数"
-        texta = "组织关系-裁员_裁员方"
-        print(textb)
-        print(texta)
-        print(ee_pipeline.predict(textb, texta))
+    # ee_pipeline.load_model()
+    # if "ner" in args.tasks:
+    #     raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+    #     print(raw_text)
+    #     print(ee_pipeline.predict(raw_text))
+    # elif "obj" in args.tasks:
+    #     textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+    #     texta = "组织关系-裁员_裁员人数"
+    #     texta = "组织关系-裁员_裁员方"
+    #     print(textb)
+    #     print(texta)
+    #     print(ee_pipeline.predict(textb, texta))

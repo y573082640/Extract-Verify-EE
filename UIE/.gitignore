@@ -3,3 +3,4 @@ __pycache__
 model_hub/
 data/
 storage/
+log/
