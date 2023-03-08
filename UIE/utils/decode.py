@@ -11,6 +11,8 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
     for label_id in range(len(id2label)):
       start_pred = np.where(start_logits[label_id] > 0.5, 1, 0)
       end_pred = np.where(end_logits[label_id] > 0.5, 1, 0)
+      start_pred = start_pred[1:-1]
+      end_pred = end_pred[1:-1]
       # print(raw_text)
       # print(start_pred)
       # print(end_pred)

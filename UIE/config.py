@@ -16,8 +16,8 @@ gaz_dict = {
 
 
 class EeArgs:
-    def __init__(self, use_lexicon=True, gaz_dim=50):
-        self.tasks = ["obj"]
+    def __init__(self, use_lexicon=True, gaz_dim=50, no_log=False):
+        self.tasks = ["ner"]
         self.data_name = "duee"
         self.data_dir = "ee"
         self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
@@ -76,13 +76,15 @@ class EeArgs:
         self.bichar_emb = "./data/embs/gigaword_chn.all.a2b.bi.ite50.vec"
         gaz_dim = gaz_dim if gaz_dim in [50, 100, 200] else 50
         self.gaz_file = gaz_dict.get(gaz_dim,50)
-        self.logs_save_dir = 'log'
-        logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
-                    log_dir=self.logs_save_dir,
-                    only_file=False)
-        logging.info("\n\n\n\n\n########  <----------------------->")
-        for key, value in self.__dict__.items():
-            logging.info(f"########  {key} = {value}")
+        
+        if not no_log:
+            self.logs_save_dir = 'log'
+            logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
+                        log_dir=self.logs_save_dir,
+                        only_file=False)
+            logging.info("\n\n\n\n\n########  <----------------------->")
+            for key, value in self.__dict__.items():
+                logging.info(f"########  {key} = {value}")
 
         if self.use_lexicon:
             self.word_alphabet = Alphabet('word')  # 单字
@@ -109,36 +111,36 @@ class EeArgs:
         self.gaz_alphabet.keep_growing = False
         print("-词典和字母表构建完毕-")
 
-        self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
-            self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
-        self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
-            self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)   
-        self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
-            self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)   
+        # self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
+        #     self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
+        # self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
+        #     self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)   
+        # self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
+        #     self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)   
                   
-        # if os.path.exists('./storage/word_embedding.npy'):
-        #     self.pretrain_word_embedding = np.load(
-        #         'storage/word_embedding.npy')
-        # else:
-        #     self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
-        #         self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)
-        #     np.save('storage/word_embedding.npy', self.pretrain_word_embedding)
+        if os.path.exists('./storage/word_embedding.npy'):
+            self.pretrain_word_embedding = np.load(
+                'storage/word_embedding.npy')
+        else:
+            self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
+                self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)
+            np.save('storage/word_embedding.npy', self.pretrain_word_embedding)
 
-        # if os.path.exists('./storage/biword_embedding.npy'):
-        #     self.pretrain_biword_embedding = np.load(
-        #         'storage/biword_embedding.npy')
-        # else:
-        #     self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
-        #         self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)
-        #     np.save('storage/biword_embedding.npy',
-        #             self.pretrain_biword_embedding)
+        if os.path.exists('./storage/biword_embedding.npy'):
+            self.pretrain_biword_embedding = np.load(
+                'storage/biword_embedding.npy')
+        else:
+            self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
+                self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)
+            np.save('storage/biword_embedding.npy',
+                    self.pretrain_biword_embedding)
 
-        # if os.path.exists('./storage/gaz_embedding.npy'):
-        #     self.pretrain_gaz_embedding = np.load('storage/gaz_embedding.npy')
-        # else:
-        #     self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
-        #         self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
-        #     np.save('storage/gaz_embedding.npy', self.pretrain_gaz_embedding)
+        if os.path.exists('./storage/gaz_embedding.npy'):
+            self.pretrain_gaz_embedding = np.load('storage/gaz_embedding.npy')
+        else:
+            self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
+                self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
+            np.save('storage/gaz_embedding.npy', self.pretrain_gaz_embedding)
 
         self.hidden_dim = self.word_emb_dim + self.biword_emb_dim + 4 * self.gaz_emb_dim
         print("-预训练向量加载完毕-维数为：" + str(self.hidden_dim))

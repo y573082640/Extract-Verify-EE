@@ -14,8 +14,7 @@ from UIE.config import EeArgs
 from UIE.ee_data_loader import EeDataset, EeCollate
 from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
 from UIE.utils.metrics import calculate_metric,word_level_calculate_metric, classification_report, get_p_r_f, get_argu_p_r_f
-
-
+from UIE.utils.lexicon_functions import generate_instance_with_gaz,batchify_augment_ids
 
 class EePipeline:
     def __init__(self, model, args):
@@ -529,12 +528,14 @@ class EePipeline:
             print(output_info)
             print(metrics["report"])
 
+
     def predict(self, textb, texta=None):
         self.model.eval()
         self.model.to(self.args.device)
         with torch.no_grad():
             if "ner" in self.args.tasks:
-                tokens_b = [i for i in textb]  # TODO:此处的tokens为单字，考虑引入更多分词方法
+                tokens_b = [i for i in textb]
+                bert_token = ['CLS']+tokens_b+['SEP']
                 encode_dict = self.args.tokenizer.encode_plus(text=tokens_b,
                                                               max_length=self.args.max_seq_len,
                                                               padding="max_length",
@@ -548,19 +549,32 @@ class EePipeline:
                     self.args.device)
                 token_type_ids = torch.from_numpy(
                     np.array(encode_dict['token_type_ids'])).unsqueeze(0).to(self.args.device)
+                
+                if self.args.use_lexicon:
+                    augment_Ids = generate_instance_with_gaz(
+                        bert_token, self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
+                        self.args.gaz_alphabet, self.args.gaz_alphabet_count,self.args.gaz,self.args.max_seq_len)
+                    # augment_Ids转变为torch向量
+                    augment_Ids = batchify_augment_ids([augment_Ids],self.args.max_seq_len)
+                else:
+                    augment_Ids = []
+
                 output = self.model(
                     ner_input_ids=token_ids,
                     ner_token_type_ids=token_type_ids,
                     ner_attention_mask=attention_masks,
+                    augment_Ids=augment_Ids
                 )
+
                 start_logits = output["ner_output"]["ner_start_logits"]
                 end_logits = output["ner_output"]["ner_end_logits"]
-                pred_entities = ner_decode(
-                    start_logits, end_logits, textb, self.args.ent_id2label)
+
+                pred_entities = ner_decode(start_logits, end_logits, textb, self.args.ent_id2label)
                 return dict(pred_entities)
 
             # tokens = ['[CLS]'] + tokens + ['[SEP]'] + tokens + + ['[SEP]']
             elif "obj" in self.args.tasks:
+                # 初始化相似库
                 tokens = [i for i in texta] + ['[SEP]'] + [i for i in textb]
                 ori_tokens = tokens
                 attention_mask = [1] * len(tokens)
@@ -604,23 +618,22 @@ class EePipeline:
 
 
 if __name__ == '__main__':
-    for h_dim in [50,100,200]:
-        args = EeArgs(use_lexicon=True,gaz_dim=h_dim)
-        model = UIEModel(args)
-        ee_pipeline = EePipeline(model, args)
+    args = EeArgs()
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
 
-        ee_pipeline.train()
-        ee_pipeline.test()
+    # ee_pipeline.train()
+    # ee_pipeline.test()
 
-    # ee_pipeline.load_model()
-    # if "ner" in args.tasks:
-    #     raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-    #     print(raw_text)
-    #     print(ee_pipeline.predict(raw_text))
-    # elif "obj" in args.tasks:
-    #     textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-    #     texta = "组织关系-裁员_裁员人数"
-    #     texta = "组织关系-裁员_裁员方"
-    #     print(textb)
-    #     print(texta)
-    #     print(ee_pipeline.predict(textb, texta))
+    ee_pipeline.load_model()
+    if "ner" in args.tasks:
+        raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+        print(raw_text)
+        print(ee_pipeline.predict(raw_text))
+    elif "obj" in args.tasks:
+        textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
+        texta = "组织关系-裁员_裁员人数"
+        texta = "组织关系-裁员_裁员方"
+        print(textb)
+        print(texta)
+        print(ee_pipeline.predict(textb, texta))
