@@ -1,20 +1,22 @@
-import logging
 import sys
-
 sys.path.append('..')
-import time
-import numpy as np
-import torch
-from torch.utils.data import DataLoader, RandomSampler
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from sklearn.metrics import classification_report as cr
-from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
-from UIE.model import UIEModel
-from UIE.config import EeArgs
-from UIE.ee_data_loader import EeDataset, EeCollate
+
+from UIE.utils.question_maker import get_question_for_argument, creat_argu_labels, creat_argu_token, creat_demo
+from UIE.utils.lexicon_functions import generate_instance_with_gaz, batchify_augment_ids
+from UIE.utils.metrics import calculate_metric, word_level_calculate_metric, classification_report, get_p_r_f, get_argu_p_r_f
 from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
-from UIE.utils.metrics import calculate_metric,word_level_calculate_metric, classification_report, get_p_r_f, get_argu_p_r_f
-from UIE.utils.lexicon_functions import generate_instance_with_gaz,batchify_augment_ids
+from UIE.ee_data_loader import EeDataset, EeCollate
+from UIE.config import EeArgs
+from UIE.model import UIEModel
+from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
+from sklearn.metrics import classification_report as cr
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from torch.utils.data import DataLoader, RandomSampler
+import torch
+import numpy as np
+import time
+import logging
+
 
 class EePipeline:
     def __init__(self, model, args):
@@ -389,7 +391,7 @@ class EePipeline:
                 if _type not in pred_entities:
                     pred_entities[_type] = []
                 total_count[idx] += len(true_entities[_type])
-                ### pred_entities[_type] = [(start_index,end_index+1)...]
+                # pred_entities[_type] = [(start_index,end_index+1)...]
                 role_metric[idx] += calculate_metric(
                     pred_entities[_type], true_entities[_type], text)
 
@@ -481,8 +483,8 @@ class EePipeline:
                         metrics = metrics["bj_metrics"]
 
                     output_info = '【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(metrics["precision"],
-                                                                                             metrics["recall"],
-                                                                                             metrics["f1"])
+                                                                                                 metrics["recall"],
+                                                                                                 metrics["f1"])
                     logging.info(output_info)
                     print(output_info)
                     if metrics["f1"] > best_f1:
@@ -521,15 +523,15 @@ class EePipeline:
                 metrics = metrics["bj_metrics"]
 
             output_info = '【test】 precision={:.4f} recall={:.4f} f1_score={:.4f}'.format(metrics["precision"],
-                                                                                    metrics["recall"],
-                                                                                    metrics["f1"])
+                                                                                         metrics["recall"],
+                                                                                         metrics["f1"])
             logging.info(output_info)
             logging.info(metrics["report"])
             print(output_info)
             print(metrics["report"])
 
+    def predict(self, textb, event_type=None, trigger=None, trigger_start_index=None):
 
-    def predict(self, textb, texta=None):
         self.model.eval()
         self.model.to(self.args.device)
         with torch.no_grad():
@@ -549,13 +551,14 @@ class EePipeline:
                     self.args.device)
                 token_type_ids = torch.from_numpy(
                     np.array(encode_dict['token_type_ids'])).unsqueeze(0).to(self.args.device)
-                
+
                 if self.args.use_lexicon:
                     augment_Ids = generate_instance_with_gaz(
                         bert_token, self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
-                        self.args.gaz_alphabet, self.args.gaz_alphabet_count,self.args.gaz,self.args.max_seq_len)
+                        self.args.gaz_alphabet, self.args.gaz_alphabet_count, self.args.gaz, self.args.max_seq_len)
                     # augment_Ids转变为torch向量
-                    augment_Ids = batchify_augment_ids([augment_Ids],self.args.max_seq_len)
+                    augment_Ids = batchify_augment_ids(
+                        [augment_Ids], self.args.max_seq_len)
                 else:
                     augment_Ids = []
 
@@ -569,71 +572,117 @@ class EePipeline:
                 start_logits = output["ner_output"]["ner_start_logits"]
                 end_logits = output["ner_output"]["ner_end_logits"]
 
-                pred_entities = ner_decode(start_logits, end_logits, textb, self.args.ent_id2label)
+                pred_entities = ner_decode(
+                    start_logits, end_logits, textb, self.args.ent_id2label)
                 return dict(pred_entities)
 
             # tokens = ['[CLS]'] + tokens + ['[SEP]'] + tokens + + ['[SEP]']
             elif "obj" in self.args.tasks:
-                # 初始化相似库
-                tokens = [i for i in texta] + ['[SEP]'] + [i for i in textb]
-                ori_tokens = tokens
-                attention_mask = [1] * len(tokens)
-                token_type_ids = [0] * self.args.max_seq_len
-                if len(tokens) > self.args.max_seq_len - 2:
-                    tokens = tokens[:self.args.max_seq_len-2]
-                    attention_mask = attention_mask[:self.args.max_seq_len-2]
-                tokens = ['[CLS]'] + tokens + ['[SEP]']
-                token_ids = self.args.tokenizer.convert_tokens_to_ids(tokens)
-                token_ids = token_ids + [0] * \
-                    (self.args.max_seq_len - len(token_ids))
-                attention_mask = attention_mask + \
-                    [0] * (self.args.max_seq_len - len(attention_mask))
-                token_ids = torch.from_numpy(
-                    np.array(token_ids)).unsqueeze(0).to(self.args.device)
-                attention_mask = torch.from_numpy(np.array(attention_mask)).unsqueeze(0).to(
-                    self.args.device)
-                token_type_ids = torch.from_numpy(
-                    np.array(token_type_ids)).unsqueeze(0).to(self.args.device)
+                argu_types = self.args.label2role[event_type]
+                text_tuples = []
+                texts = []
+                questions = []
+                triggers = []
+                for role in argu_types:
+                    # 组织行为-游行_时间
+                    ### 此处是为了配合get_question_for_argument函数，转变为"时间"
+                    role = role.split('_')[-1]
+                    q = get_question_for_argument(event_type, role)
+                    text_tuple = {
+                        'text': textb,
+                        'trigger': trigger,
+                        'question': q,
+                        'trigger_start_index': trigger_start_index,
+                        'argument': None,
+                        'argument_start_index': None,
+                        'role': role,
+                        'event_type': event_type
+                    }
+                    texts.append(textb)
+                    questions.append(q)
+                    triggers.append(trigger)
+                    text_tuples.append(text_tuple)
 
-                output = self.model(
-                    re_obj_input_ids=token_ids,
-                    re_obj_token_type_ids=token_type_ids,
-                    re_obj_attention_mask=attention_mask,
-                )
-                start_logits = output["re_output"]["obj_start_logits"].detach(
-                ).cpu()
-                end_logits = output["re_output"]["obj_end_logits"].detach(
-                ).cpu()
-                length = sum(attention_mask.detach().cpu()[0])
+                sim_scorer = self.args.sim_scorer
+                text_embs = sim_scorer.get_sentence_embedding(texts)
+                question_embs = sim_scorer.get_sentence_embedding(questions)
+                trigger_embs = sim_scorer.get_sentence_embedding(triggers)
+                embs = []
+                for e1, e2, e3 in zip(text_embs, trigger_embs, question_embs):
+                    embs.append(torch.from_numpy(
+                        np.concatenate((e1, e2, e3), axis=None)))
+                demo_embs = self.args.demo_embs
+                demo_tuples = self.args.demo_tuples
+                most_sim = sim_scorer.sim_match(
+                    embs, demo_embs)  # {corpus_id,score}
+                for idx, text_tuple in enumerate(text_tuples):
+                    sim_id = most_sim[idx]['corpus_id']
+                    demo = creat_demo(demo_tuples[sim_id])
+                    tokens = creat_argu_token(
+                        text_tuple, demo, self.args.max_seq_len)
+                    if self.args.use_lexicon:
+                        augment_Ids = generate_instance_with_gaz(
+                            tokens,
+                            self.args.pos_alphabet,
+                            self.args.word_alphabet,
+                            self.args.biword_alphabet,
+                            self.args.gaz_alphabet,
+                            self.args.gaz_alphabet_count,
+                            self.args.gaz,
+                            self.args.max_seq_len)
+                        augment_Ids = batchify_augment_ids(
+                            [augment_Ids], self.args.max_seq_len)                        
+                    else:
+                        augment_Ids = []
 
-                pred_entities = bj_decode(
-                    start_logits, end_logits, length, {0: "答案"})
-                values = pred_entities["答案"]
-                objects = []
-                for v in values:
-                    start = v[0]
-                    end = v[1]
-                    objects.append("".join(ori_tokens[start:end]))
-                return objects
+                    attention_mask = [1] * len(tokens)
+                    token_type_ids = [0] * self.args.max_seq_len
+
+                    if len(tokens) > self.args.max_seq_len:
+                        tokens = tokens[:self.args.max_seq_len]
+                        attention_mask = attention_mask[:self.args.max_seq_len]
+
+                    token_ids = self.args.tokenizer.convert_tokens_to_ids(
+                        tokens)
+                    token_ids = token_ids + [0] * \
+                        (self.args.max_seq_len - len(token_ids))
+                    attention_mask = attention_mask + \
+                        [0] * (self.args.max_seq_len - len(attention_mask))
+                    token_ids = torch.from_numpy(
+                        np.array(token_ids)).unsqueeze(0).to(self.args.device)
+                    attention_mask = torch.from_numpy(np.array(attention_mask)).unsqueeze(0).to(
+                        self.args.device)
+                    token_type_ids = torch.from_numpy(
+                        np.array(token_type_ids)).unsqueeze(0).to(self.args.device)
+
+                    output = self.model(
+                        re_obj_input_ids=token_ids,
+                        re_obj_token_type_ids=token_type_ids,
+                        re_obj_attention_mask=attention_mask,
+                        augment_Ids=augment_Ids
+                    )
+
+                    start_logits = output["re_output"]["obj_start_logits"].detach(
+                    ).cpu()
+                    end_logits = output["re_output"]["obj_end_logits"].detach(
+                    ).cpu()
+                    length = sum(attention_mask.detach().cpu()[0])
+
+                    pred_entities = bj_decode(
+                        start_logits, end_logits, length, {0: "答案"})
+                    values = pred_entities["答案"]
+                    objects = []
+                    for v in values:
+                        start = v[0]
+                        end = v[1]
+                        ans = "".join(tokens[start:end]).strip("[TGR]")
+                        objects.append(ans)
+                    logging.info(text_tuple['role'] + "======" + str(objects))
 
 
 if __name__ == '__main__':
-    args = EeArgs()
+    args = EeArgs('obj')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
-
-    # ee_pipeline.train()
-    # ee_pipeline.test()
-
-    ee_pipeline.load_model()
-    if "ner" in args.tasks:
-        raw_text = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-        print(raw_text)
-        print(ee_pipeline.predict(raw_text))
-    elif "obj" in args.tasks:
-        textb = "富国银行收缩农业与能源贷款团队 裁减200多名银行家"
-        texta = "组织关系-裁员_裁员人数"
-        texta = "组织关系-裁员_裁员方"
-        print(textb)
-        print(texta)
-        print(ee_pipeline.predict(textb, texta))
+    ee_pipeline.train()
+    ee_pipeline.test()

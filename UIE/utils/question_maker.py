@@ -30,6 +30,74 @@ def get_question_for_argument(event_type, role):
     return query_str_final
 
 
+def creat_demo(sim_tuple):
+    """
+        从sim_tuple中提取相关信息，并插入特殊占位符，包括[TGR]，[ARG]，[DEMO]
+    """
+    sim_trigger = sim_tuple['trigger']
+    sim_trigger_start_index = sim_tuple['trigger_start_index']
+    sim_text_tokens = [i for i in sim_tuple['text']]
+    sim_text_tokens.insert(sim_trigger_start_index, '[TGR]')
+    sim_text_tokens.insert(
+        sim_trigger_start_index + 1 + len(sim_trigger), '[TGR]')
+    demo = ['[DEMO]'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
+        sim_text_tokens + ['[SEP]', '[ARG]'] + \
+        [i for i in sim_tuple['argument']] + ['[DEMO]']
+    return demo
+
+
+def creat_argu_labels(argu_token, demo, text_tuple, max_len):
+    argu_start_labels = [0] * len(argu_token)
+    argu_end_labels = [0] * len(argu_token)
+
+    # 因为text中多加了[TGR]
+    trigger = text_tuple["trigger"]
+    trigger_start_index = text_tuple['trigger_start_index']
+    # 用于增加对arg的偏置
+    tgr1_index = trigger_start_index
+    tgr2_index = trigger_start_index + 1 + len(trigger)
+    argu = text_tuple["argument"]
+    argument_start_index = text_tuple['argument_start_index']
+
+    if tgr1_index <= argument_start_index:
+        argument_start_index += 1
+    if tgr2_index <= argument_start_index:
+        argument_start_index += 1
+
+    question = text_tuple['question']
+    pre_tokens = demo + [i for i in question] + ['[SEP]']
+    argu_start = len(pre_tokens) + 1 + argument_start_index
+    argu_end = argu_start + len(argu) - 1
+
+    if argu_end >= max_len - 1:
+        return [], []
+
+    argu_start_labels[argu_start] = 1
+    argu_end_labels[argu_end] = 1
+
+    return argu_start_labels, argu_end_labels
+
+
+def creat_argu_token(text_tuple, demo, max_len):
+    question = text_tuple['question']
+    text = text_tuple['text']
+    trigger = text_tuple["trigger"]
+    trigger_start_index = text_tuple['trigger_start_index']
+    text_tokens = [i for i in text]
+    # 用于增加对arg的偏置
+    tgr1_index = trigger_start_index
+    tgr2_index = trigger_start_index + 1 + len(trigger)
+    text_tokens.insert(tgr1_index, '[TGR]')
+    text_tokens.insert(tgr2_index, '[TGR]')
+    pre_tokens = demo + [i for i in question] + ['[SEP]']
+    if len(text_tokens) + len(pre_tokens) > max_len - 2:
+        argu_token = (pre_tokens + text_tokens)[:max_len-2]
+    else:
+        argu_token = pre_tokens + text_tokens
+    argu_token = ['[CLS]'] + argu_token + ['[SEP]']
+    return argu_token
+
+
 class Sim_scorer:
     def __init__(self, sim_model) -> None:
         self.tokenizer = AutoTokenizer.from_pretrained(sim_model)
@@ -109,14 +177,14 @@ class Sim_scorer:
                             'trigger_idx': tgr_idx
                         })
                         tuples.append({
-                            'text':text, 
-                            'trigger':trigger, 
-                            'question':question, 
-                            'trigger_start_index':event["trigger_start_index"],
-                            'argument':argument["argument"] ,
-                            'argument_start_index':argument["argument_start_index"],
-                            'role':argument["role"],
-                            'event_type':event["event_type"]
+                            'text': text,
+                            'trigger': trigger,
+                            'question': question,
+                            'trigger_start_index': event["trigger_start_index"],
+                            'argument': argument["argument"],
+                            'argument_start_index': argument["argument_start_index"],
+                            'role': argument["role"],
+                            'event_type': event["event_type"]
                         })
 
         # 分批转化为embs
@@ -142,13 +210,14 @@ class Sim_scorer:
             ret.append(top2_list[1])
         return ret
 
+
 if __name__ == '__main__':
-    
+
     test_file = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_train.json'
     model = 'model_hub/paraphrase-MiniLM-L6-v2'
     t1 = time.time()
     scorer = Sim_scorer(model)
-    scorer.sim_match(test_file,test_file)
+    scorer.sim_match(test_file, test_file)
     t2 = time.time()
     running_time = t2-t1
-    print('time cost : %.5f sec' %running_time)
+    print('time cost : %.5f sec' % running_time)

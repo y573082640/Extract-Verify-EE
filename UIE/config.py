@@ -4,10 +4,11 @@ from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_ga
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.logging import logger_init
+from utils.question_maker import Sim_scorer
 import logging
 import os
 import numpy as np
-
+import json
 gaz_dict = {
     50: "./data/embs/ctb.50d.vec",
     100: "./data/embs/tencent-d100/tencent-ailab-embedding-zh-d100-v0.2.0-s.txt",
@@ -16,8 +17,8 @@ gaz_dict = {
 
 
 class EeArgs:
-    def __init__(self, use_lexicon=True, gaz_dim=50, no_log=False):
-        self.tasks = ["ner"]
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, no_log=False):
+        self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
         self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
@@ -33,11 +34,13 @@ class EeArgs:
             self.data_dir, self.data_name)
         self.demo_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
+        self.sim_model='model_hub/paraphrase-MiniLM-L6-v2'
         self.ignore_key = ['raw_tokens', 'batch_augment_Ids']
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
         self.ent_label2id = {}
         self.ent_id2label = {}
+
         for i, label in enumerate(self.entity_label):
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
@@ -95,6 +98,17 @@ class EeArgs:
             self.gaz_alphabet_count = {}
             self.gaz_alphabet_count[1] = 0
             self.init_lexicon()
+
+        if 'obj' in self.tasks:
+            label2role_path = "./data/ee/{}/label2role.json".format(self.data_name)
+            with open(label2role_path, "r", encoding="utf-8") as fp:
+                self.label2role = json.load(fp)
+            # 相似度增强
+            logging.info('...加载相似度匹配模型:'+self.sim_model)
+            self.sim_scorer = Sim_scorer(self.sim_model)
+            logging.info('...构造提示库embedding')
+            self.demo_embs, self.demo_tuples=self.sim_scorer.create_embs_and_tuples(self.demo_path)
+            logging.info('...提示库embedding构造完毕')
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)

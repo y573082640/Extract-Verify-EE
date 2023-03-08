@@ -1,4 +1,5 @@
 import json
+import logging
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -8,7 +9,7 @@ import jieba.posseg as pseg
 from sentence_transformers import SentenceTransformer, util
 from transformers import BertTokenizer
 import time
-from utils.question_maker import Sim_scorer
+from utils.question_maker import Sim_scorer, creat_demo, creat_argu_token, creat_argu_labels
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, generate_instance_with_gaz, batchify_augment_ids
@@ -50,11 +51,10 @@ class ListDataset(Dataset):
 # 加载实体识别数据集
 class EeDataset(ListDataset):
 
-    def load_data(self, filename, tokenizer, max_len, entity_label=None, tasks=None, gaz_file=None, sim_model='model_hub/paraphrase-MiniLM-L6-v2', ):
+    def load_data(self, filename, tokenizer, max_len, entity_label=None, tasks=None, gaz_file=None):
         ner_data = []
         obj_data = []
         ent_label2id = {label: i for i, label in enumerate(entity_label)}
-        sim_scorer = Sim_scorer(sim_model)
         if "ner" in tasks:
             with open(filename, encoding='utf-8') as f:
                 f = f.read().strip().split("\n")
@@ -68,18 +68,18 @@ class EeDataset(ListDataset):
 
                     event_start_labels = np.zeros((len(ent_label2id), max_len))
                     event_end_labels = np.zeros((len(ent_label2id), max_len))
-                    
+
                     # 词典增强的向量
                     bert_token = [i for i in text]
                     bert_token = ['[CLS]'] + bert_token + ['[SEP]']
 
                     if len(bert_token) > max_len - 2:
-                            bert_token = bert_token[:max_len - 2]
+                        bert_token = bert_token[:max_len - 2]
 
                     if self.args.use_lexicon:
                         augment_Ids = generate_instance_with_gaz(
                             bert_token, self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
-                            self.args.gaz_alphabet, self.args.gaz_alphabet_count,self.args.gaz,max_len)
+                            self.args.gaz_alphabet, self.args.gaz_alphabet_count, self.args.gaz, max_len)
                     else:
                         augment_Ids = []
 
@@ -98,7 +98,7 @@ class EeDataset(ListDataset):
                             continue
 
                         event_start_labels[ent_label2id[event_type]
-                                           ][trigger_start_index+1] = 1 #TODO: 如果丢入分类器前要去掉CLS，则不用+1
+                                           ][trigger_start_index+1] = 1  # TODO: 如果丢入分类器前要去掉CLS，则不用+1
                         event_end_labels[ent_label2id[event_type]
                                          ][trigger_start_index+len(trigger)] = 1
 
@@ -112,95 +112,49 @@ class EeDataset(ListDataset):
                     ner_data.append(event_data)
 
         elif "obj" in tasks:
-            print('...构造文本embedding')
+            logging.info('...构造文本embedding')
+            sim_scorer = self.args.sim_scorer
             embs, tuples = sim_scorer.create_embs_and_tuples(filename)
-            print('文本embedding构造完毕')
+            logging.info('文本embedding构造完毕')
             # 此处用训练集作为demo库
-            print('...构造提示库embedding')
-            demo_embs, demo_tuples = sim_scorer.create_embs_and_tuples(self.args.demo_path)
-            print('提示库embedding构造完毕')
+            demo_embs = self.args.demo_embs
+            demo_tuples = self.args.demo_tuples
             most_sim = sim_scorer.sim_match(
                 embs, demo_embs)  # {corpus_id,score}
-            print('相似度匹配完成')
+            logging.info('相似度匹配完成')
             for idx, text_tuple in enumerate(tuples):
-                # 从sim_tuple中提取相关信息，并插入特殊占位符，包括[TGR]，[ARG]，[DEMO]
                 sim_id = most_sim[idx]['corpus_id']
-                sim_tuple = demo_tuples[sim_id]
-                sim_trigger = sim_tuple['trigger']
-                sim_trigger_start_index = sim_tuple['trigger_start_index']
-                sim_text_tokens = [i for i in sim_tuple['text']]
-                sim_text_tokens.insert(sim_trigger_start_index, '[TGR]')
-                sim_text_tokens.insert(
-                    sim_trigger_start_index + 1 + len(sim_trigger), '[TGR]')
-                demo = ['[DEMO]'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
-                    sim_text_tokens + ['[SEP]', '[ARG]'] + \
-                    [i for i in sim_tuple['argument']] + ['[DEMO]']
+                demo = creat_demo(demo_tuples[sim_id])
+                argu_token = creat_argu_token(text_tuple, demo, max_len)
+                argu_start_labels, argu_end_labels = creat_argu_labels(
+                    argu_token, demo, text_tuple, max_len)
 
-                question = text_tuple['question']
-                text = text_tuple['text']
-
-                # 从text_tuple中提取相关信息，并插入特殊占位符[TGR]
-                trigger = text_tuple["trigger"]
-                trigger_start_index = text_tuple['trigger_start_index']
-                text_tokens = [i for i in text]
-                # 用于增加对arg的偏置
-                tgr1_index = trigger_start_index
-                tgr2_index = trigger_start_index + 1 + len(trigger)
-                text_tokens.insert(tgr1_index, '[TGR]')
-                text_tokens.insert(tgr2_index, '[TGR]')
-
-                pre_tokens = demo + [i for i in question] + ['[SEP]']
-
-                argu = text_tuple["argument"]
-                argument_start_index = text_tuple['argument_start_index']
-                if len(text_tokens) + len(pre_tokens) > max_len - 2:
-                    argu_token = (pre_tokens + text_tokens)[:max_len-2]
-                else:
-                    argu_token = pre_tokens + text_tokens
-                argu_token = ['[CLS]'] + argu_token + ['[SEP]']
+                if len(argu_start_labels) == 0:
+                    continue
 
                 if self.args.use_lexicon:
                     augment_Ids = generate_instance_with_gaz(
-                        argu_token, 
-                        self.args.pos_alphabet, 
-                        self.args.word_alphabet, 
+                        argu_token,
+                        self.args.pos_alphabet,
+                        self.args.word_alphabet,
                         self.args.biword_alphabet,
-                        self.args.gaz_alphabet, 
+                        self.args.gaz_alphabet,
                         self.args.gaz_alphabet_count,
                         self.args.gaz,
                         max_len)
                 else:
                     augment_Ids = []
 
-                argu_start_labels = [0] * len(argu_token)
-                argu_end_labels = [0] * len(argu_token)
-
-                # 因为text中多加了[TGR]
-
-                if tgr1_index <= argument_start_index:
-                    argument_start_index += 1
-                if tgr2_index <= argument_start_index:
-                    argument_start_index += 1
-
-                argu_start = len(pre_tokens) + 1 + argument_start_index
-                argu_end = argu_start + len(argu) - 1
-
-                if argu_end >= max_len - 1:
-                    continue
-
-                argu_start_labels[argu_start] = 1
-                argu_end_labels[argu_end] = 1
-
                 argu_data = {
                     "obj_tokens": argu_token,
                     "obj_start_labels": argu_start_labels,
                     "obj_end_labels": argu_end_labels,
-                    "augment_Ids":augment_Ids
+                    "augment_Ids": augment_Ids
                 }
 
                 obj_data.append(argu_data)
-                
-        print("数据集构建完毕")
+
+        logging.info("数据集构建完毕")
         return ner_data if "ner" in tasks else obj_data
 
 
@@ -244,7 +198,7 @@ class EeCollate:
                 ner_tokens = self.tokenizer.convert_tokens_to_ids(ner_tokens)
                 ner_start_labels = data["ner_start_labels"]
                 ner_end_labels = data["ner_end_labels"]
-                
+
                 # 对齐操作
                 if len(ner_tokens) < self.maxlen:
                     # 第0个token的第0个gaz列表长度
@@ -261,7 +215,6 @@ class EeCollate:
                 batch_ner_start_labels.append(ner_start_labels)
                 batch_ner_end_labels.append(ner_end_labels)
                 batch_raw_tokens.append(raw_tokens)
-                
 
             elif "obj" in self.tasks:
                 obj_tokens = data["obj_tokens"]
@@ -334,11 +287,12 @@ class EeCollate:
 
             res = sbj_obj_res
 
-        ### 用于错误输出
+        # 用于错误输出
         res['raw_tokens'] = batch_raw_tokens
-        ### 用于词典增强
+        # 用于词典增强
         if self.args.use_lexicon:
-            batch_augment_Ids = batchify_augment_ids(batch_augment_Ids,self.maxlen)
+            batch_augment_Ids = batchify_augment_ids(
+                batch_augment_Ids, self.maxlen)
         res['batch_augment_Ids'] = batch_augment_Ids
 
         return res
@@ -358,7 +312,7 @@ if __name__ == "__main__":
 
     print(entity_label)
     tasks = ["ner"]
-    gaz_file="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/embs/ctb.50d.vec"
+    gaz_file = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/embs/ctb.50d.vec"
     train_dataset = EeDataset(file_path='data/ee/duee/duee_dev.json',
                               tokenizer=tokenizer,
                               max_len=max_seq_len,
