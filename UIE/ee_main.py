@@ -615,6 +615,7 @@ class EePipeline:
                 demo_tuples = self.args.demo_tuples
                 most_sim = sim_scorer.sim_match(
                     embs, demo_embs)  # {corpus_id,score}
+                ret = []
                 for idx, text_tuple in enumerate(text_tuples):
                     sim_id = most_sim[idx]['corpus_id']
                     demo = creat_demo(demo_tuples[sim_id])
@@ -671,13 +672,16 @@ class EePipeline:
                     pred_entities = bj_decode(
                         start_logits, end_logits, length, {0: "答案"})
                     values = pred_entities["答案"]
-                    objects = []
                     for v in values:
                         start = v[0]
                         end = v[1]
-                        ans = "".join(tokens[start:end]).strip("[TGR]")
-                        objects.append(ans)
-                    logging.info(text_tuple['role'] + "======" + str(objects))
+                        ans = "".join(tokens[start:end]).replace("[TGR]","")
+                        ret.append({
+                            'role':text_tuple['role'],
+                            'argument':ans,
+                            # 'argu':"".join(tokens)
+                        })
+                return ret
 
 
 if __name__ == '__main__':
