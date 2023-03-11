@@ -17,7 +17,7 @@ gaz_dict = {
 
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, no_log=False):
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True):
         self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
@@ -49,7 +49,7 @@ class EeArgs:
         self.train_batch_size = 32
         self.eval_batch_size = 32
         self.eval_step = 500
-        self.max_seq_len = 256
+        self.max_seq_len = 256+128
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
@@ -80,7 +80,7 @@ class EeArgs:
         gaz_dim = gaz_dim if gaz_dim in [50, 100, 200] else 50
         self.gaz_file = gaz_dict.get(gaz_dim,50)
         
-        if not no_log:
+        if log:
             self.logs_save_dir = 'log'
             logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
                         log_dir=self.logs_save_dir,

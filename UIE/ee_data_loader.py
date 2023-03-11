@@ -120,14 +120,24 @@ class EeDataset(ListDataset):
             demo_embs = self.args.demo_embs
             demo_tuples = self.args.demo_tuples
             most_sim = sim_scorer.sim_match(
-                embs, demo_embs)  # {corpus_id,score}
+                embs, demo_embs, rank=1 if filename == self.args.demo_path else 0)  # {corpus_id,score}
             logging.info('相似度匹配完成')
+            logging.info(1 if filename == self.args.demo_path else 0)
             for idx, text_tuple in enumerate(tuples):
                 sim_id = most_sim[idx]['corpus_id']
+                sim_score = most_sim[idx]['score']
+
+
                 demo = creat_demo(demo_tuples[sim_id])
-                argu_token = creat_argu_token(text_tuple, demo, max_len)
+                argu_token, obj_token_type_ids = creat_argu_token(
+                    text_tuple, demo, max_len)
                 argu_start_labels, argu_end_labels = creat_argu_labels(
                     argu_token, demo, text_tuple, max_len)
+                
+                logging.info('============')
+                logging.info(sim_score)
+                logging.info("".join(demo_tuples[sim_id]['question']+ "--" + demo_tuples[sim_id]['trigger']))
+                logging.info("".join(text_tuple['question'] + "--" + text_tuple['trigger']))
 
                 if len(argu_start_labels) == 0:
                     continue
@@ -149,12 +159,15 @@ class EeDataset(ListDataset):
                     "obj_tokens": argu_token,
                     "obj_start_labels": argu_start_labels,
                     "obj_end_labels": argu_end_labels,
-                    "augment_Ids": augment_Ids
+                    'obj_token_type_ids': obj_token_type_ids,
+                    "augment_Ids": augment_Ids,
+                    'sim_score': 1 if sim_score > 0.75 else 0
                 }
 
                 obj_data.append(argu_data)
 
         logging.info("数据集构建完毕")
+        exit(0)
         return ner_data if "ner" in tasks else obj_data
 
 
@@ -186,6 +199,7 @@ class EeCollate:
         batch_obj_start_labels = []
         batch_obj_end_labels = []
         batch_augment_Ids = []
+        batch_sim_score = []
         for i, data in enumerate(batch):
 
             augment_Ids = data["augment_Ids"]
@@ -222,7 +236,8 @@ class EeCollate:
                 obj_tokens = self.tokenizer.convert_tokens_to_ids(obj_tokens)
                 obj_start_labels = data["obj_start_labels"]
                 obj_end_labels = data["obj_end_labels"]
-                obj_token_type_ids = [0] * self.maxlen
+                obj_token_type_ids = data["obj_token_type_ids"]
+                sim_score = data['sim_score']
 
                 if len(obj_tokens) < self.maxlen:
                     obj_start_labels = obj_start_labels + \
@@ -231,6 +246,8 @@ class EeCollate:
                         [0] * (self.maxlen - len(obj_tokens))
                     obj_attention_mask = [
                         1] * len(obj_tokens) + [0] * (self.maxlen - len(obj_tokens))
+                    obj_token_type_ids = obj_token_type_ids + [0] * \
+                        (self.maxlen - len(obj_tokens))
                     obj_tokens = obj_tokens + [0] * \
                         (self.maxlen - len(obj_tokens))
                 else:
@@ -242,6 +259,7 @@ class EeCollate:
                 batch_obj_start_labels.append(obj_start_labels)
                 batch_obj_end_labels.append(obj_end_labels)
                 batch_raw_tokens.append(raw_tokens)
+                batch_sim_score.append(sim_score)
 
         res = {}
 
@@ -270,12 +288,15 @@ class EeCollate:
             batch_obj_token_ids = convert_list_to_tensor(batch_obj_token_ids)
             batch_obj_attention_mask = convert_list_to_tensor(
                 batch_obj_attention_mask)
+
             batch_obj_token_type_ids = convert_list_to_tensor(
                 batch_obj_token_type_ids)
             batch_obj_start_labels = convert_list_to_tensor(
                 batch_obj_start_labels, dtype=torch.float)
             batch_obj_end_labels = convert_list_to_tensor(
                 batch_obj_end_labels, dtype=torch.float)
+            batch_sim_score = convert_list_to_tensor(
+                batch_sim_score, dtype=torch.float)
 
             sbj_obj_res = {
                 "re_obj_input_ids": batch_obj_token_ids,
@@ -283,6 +304,7 @@ class EeCollate:
                 "re_obj_token_type_ids": batch_obj_token_type_ids,
                 "re_obj_start_labels": batch_obj_start_labels,
                 "re_obj_end_labels": batch_obj_end_labels,
+                'batch_sim_score': batch_sim_score
             }
 
             res = sbj_obj_res

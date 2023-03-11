@@ -94,7 +94,8 @@ class EePipeline:
                                     re_sbj_attention_mask=batch_data["re_sbj_attention_mask"],
                                     re_sbj_start_labels=batch_data["re_sbj_start_labels"],
                                     re_sbj_end_labels=batch_data["re_sbj_end_labels"],
-                                    augment_Ids=batch_data["batch_augment_Ids"]
+                                    augment_Ids=batch_data["batch_augment_Ids"],
+                                    sim_scores=batch_data["batch_sim_score"]
                                     )
                 start_logits = output["re_output"]["sbj_start_logits"].detach(
                 ).cpu()
@@ -111,7 +112,8 @@ class EePipeline:
                                     re_obj_attention_mask=batch_data["re_obj_attention_mask"],
                                     re_obj_start_labels=batch_data["re_obj_start_labels"],
                                     re_obj_end_labels=batch_data["re_obj_end_labels"],
-                                    augment_Ids=batch_data["batch_augment_Ids"]
+                                    augment_Ids=batch_data["batch_augment_Ids"],
+                                    sim_scores=batch_data["batch_sim_score"]
                                     )
                 start_logits = output["re_output"]["obj_start_logits"].detach(
                 ).cpu()
@@ -456,7 +458,8 @@ class EePipeline:
                         re_obj_attention_mask=batch_data["re_obj_attention_mask"],
                         re_obj_start_labels=batch_data["re_obj_start_labels"],
                         re_obj_end_labels=batch_data["re_obj_end_labels"],
-                        augment_Ids=batch_data["batch_augment_Ids"]
+                        augment_Ids=batch_data["batch_augment_Ids"],
+                        sim_scores=batch_data['batch_sim_score']
                     )
                     loss = output["re_output"]["obj_loss"]
 
@@ -580,9 +583,7 @@ class EePipeline:
             elif "obj" in self.args.tasks:
                 argu_types = self.args.label2role[event_type]
                 text_tuples = []
-                texts = []
-                questions = []
-                triggers = []
+                concat_texts = []
                 for role in argu_types:
                     # 组织行为-游行_时间
                     ### 此处是为了配合get_question_for_argument函数，转变为"时间"
@@ -598,28 +599,22 @@ class EePipeline:
                         'role': role,
                         'event_type': event_type
                     }
-                    texts.append(textb)
-                    questions.append(q)
-                    triggers.append(trigger)
+                    concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
+                            q, trigger, len(textb)))
                     text_tuples.append(text_tuple)
 
                 sim_scorer = self.args.sim_scorer
-                text_embs = sim_scorer.get_sentence_embedding(texts)
-                question_embs = sim_scorer.get_sentence_embedding(questions)
-                trigger_embs = sim_scorer.get_sentence_embedding(triggers)
-                embs = []
-                for e1, e2, e3 in zip(text_embs, trigger_embs, question_embs):
-                    embs.append(torch.from_numpy(
-                        np.concatenate((e1, e2, e3), axis=None)))
+                text_embs = sim_scorer.get_sentence_embedding(concat_texts)
                 demo_embs = self.args.demo_embs
                 demo_tuples = self.args.demo_tuples
                 most_sim = sim_scorer.sim_match(
-                    embs, demo_embs)  # {corpus_id,score}
+                    text_embs, demo_embs, rank=0)  # {corpus_id,score} rank表示取最相似的还是次相似的
                 ret = []
                 for idx, text_tuple in enumerate(text_tuples):
                     sim_id = most_sim[idx]['corpus_id']
+                    sim_score =  1 if most_sim[idx]['score']>0.75 else 0
                     demo = creat_demo(demo_tuples[sim_id])
-                    tokens = creat_argu_token(
+                    tokens,token_type_ids = creat_argu_token(
                         text_tuple, demo, self.args.max_seq_len)
                     if self.args.use_lexicon:
                         augment_Ids = generate_instance_with_gaz(
@@ -637,30 +632,38 @@ class EePipeline:
                         augment_Ids = []
 
                     attention_mask = [1] * len(tokens)
-                    token_type_ids = [0] * self.args.max_seq_len
 
                     if len(tokens) > self.args.max_seq_len:
                         tokens = tokens[:self.args.max_seq_len]
                         attention_mask = attention_mask[:self.args.max_seq_len]
+                        token_type_ids = token_type_ids[:self.args.max_seq_len]
 
                     token_ids = self.args.tokenizer.convert_tokens_to_ids(
                         tokens)
+                    
+                    # 对齐长度
                     token_ids = token_ids + [0] * \
                         (self.args.max_seq_len - len(token_ids))
                     attention_mask = attention_mask + \
                         [0] * (self.args.max_seq_len - len(attention_mask))
+                    token_type_ids = token_type_ids + \
+                        [0] * (self.args.max_seq_len - len(token_type_ids))
+                    # 转换为torch
                     token_ids = torch.from_numpy(
                         np.array(token_ids)).unsqueeze(0).to(self.args.device)
                     attention_mask = torch.from_numpy(np.array(attention_mask)).unsqueeze(0).to(
                         self.args.device)
                     token_type_ids = torch.from_numpy(
                         np.array(token_type_ids)).unsqueeze(0).to(self.args.device)
-
+                    sim_score = torch.from_numpy(
+                        np.array([sim_score])).unsqueeze(0).to(self.args.device)
+                    
                     output = self.model(
                         re_obj_input_ids=token_ids,
                         re_obj_token_type_ids=token_type_ids,
                         re_obj_attention_mask=attention_mask,
-                        augment_Ids=augment_Ids
+                        augment_Ids=augment_Ids,
+                        sim_scores = sim_score
                     )
 
                     start_logits = output["re_output"]["obj_start_logits"].detach(

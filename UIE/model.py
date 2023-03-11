@@ -121,7 +121,8 @@ class UIEModel(nn.Module):
                        re_obj_attention_mask=None,
                        re_obj_start_labels=None,
                        re_obj_end_labels=None, 
-                       augment_Ids=None):
+                       augment_Ids=None,
+                       sim_scores=None):
         res = {
             "sbj_start_logits": None,
             "sbj_end_logits": None,
@@ -132,7 +133,8 @@ class UIEModel(nn.Module):
             re_obj_token_type_ids,
             re_obj_attention_mask,
         )
-        obj_output = obj_output[0]
+
+        last_hidden_state = obj_output.last_hidden_state
         
         if self.args.use_lexicon:
             word_input_cat = compile_lexicon_embeddings(augment_Ids,
@@ -140,12 +142,14 @@ class UIEModel(nn.Module):
                                                         self.biword_embedding,
                                                         self.gaz_embedding,
                                                         self.args.use_count)
-            word_input_cat = torch.cat([word_input_cat, obj_output], dim=-1)
+            word_input_cat = torch.cat([word_input_cat, last_hidden_state], dim=-1)
         else:
-            word_input_cat = obj_output
+            word_input_cat = last_hidden_state
 
         obj_start_logits = self.re_obj_start_fc(word_input_cat).squeeze()
         obj_end_logits = self.re_obj_end_fc(word_input_cat).squeeze()
+
+
         res["obj_start_logits"] = obj_start_logits
         res["obj_end_logits"] = obj_end_logits
         if re_obj_start_labels is not None and re_obj_end_labels is not None:
@@ -340,7 +344,8 @@ class UIEModel(nn.Module):
                 re_rel_labels=None,
                 ee_start_labels=None,
                 ee_end_labels=None,
-                augment_Ids=None):
+                augment_Ids=None,
+                sim_scores=None):
 
         res = {
             "ner_output": None,
@@ -376,7 +381,8 @@ class UIEModel(nn.Module):
                 re_obj_attention_mask=re_obj_attention_mask,
                 re_obj_start_labels=re_obj_start_labels,
                 re_obj_end_labels=re_obj_end_labels,
-                augment_Ids=augment_Ids
+                augment_Ids=augment_Ids,
+                sim_scores=sim_scores
             )
             res["re_output"] = re_output
 

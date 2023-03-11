@@ -41,7 +41,7 @@ def creat_demo(sim_tuple):
     sim_text_tokens.insert(
         sim_trigger_start_index + 1 + len(sim_trigger), '[TGR]')
     demo = ['[DEMO]'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
-        sim_text_tokens + ['[SEP]', '[ARG]'] + \
+        sim_text_tokens + ['[SEP]', '答案是：[ARG]'] + \
         [i for i in sim_tuple['argument']] + ['[DEMO]']
     return demo
 
@@ -95,7 +95,9 @@ def creat_argu_token(text_tuple, demo, max_len):
     else:
         argu_token = pre_tokens + text_tokens
     argu_token = ['[CLS]'] + argu_token + ['[SEP]']
-    return argu_token
+    token_type_ids = [0] * len(argu_token)  # [CLS] +　pre_tokens
+    # token_type_ids += [1] * (len(argu_token) - len(token_type_ids))
+    return argu_token, token_type_ids
 
 
 class Sim_scorer:
@@ -142,10 +144,7 @@ class Sim_scorer:
         return sentence_embeddings.cpu()
 
     def create_embs_and_tuples(self, filename):
-        texts = []
-        triggers = []
-        questions = []
-        text_trigger_question_map = []
+        concat_texts = []
         embs = []
         tuples = []
         # 记录所有的
@@ -154,7 +153,6 @@ class Sim_scorer:
             for evt_idx, d in enumerate(f):
                 d = json.loads(d)
                 text = d["text"]
-                texts.append(text)
 
                 event_list = d["event_list"]
                 if len(text) == 0:
@@ -165,17 +163,13 @@ class Sim_scorer:
                     arguments = event["arguments"]
                     trigger = event["trigger"]
 
-                    triggers.append(trigger)
                     for aru_idx, argument in enumerate(arguments):
                         role = argument["role"]
                         question = get_question_for_argument(
                             event_type=event_type, role=role)
-                        questions.append(question)
-                        text_trigger_question_map.append({
-                            'text_idx': evt_idx,
-                            'argu_idx': aru_idx,
-                            'trigger_idx': tgr_idx
-                        })
+                        # 文本越短越好匹配，考虑四个要素：类型、角色、触发词和文本长度。
+                        concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
+                            question, trigger, len(text)))
                         tuples.append({
                             'text': text,
                             'trigger': trigger,
@@ -189,25 +183,26 @@ class Sim_scorer:
 
         # 分批转化为embs
 
-        text_embs = self._batch_encode(batch_size=1000, dataset=texts)
-        question_embs = self._batch_encode(batch_size=1000, dataset=questions)
-        trigger_embs = self._batch_encode(batch_size=1000, dataset=triggers)
-
+        # text_embs = self._batch_encode(batch_size=1000, dataset=texts)
+        # type。role。trigger。
+        # question_embs = self._batch_encode(batch_size=1000, dataset=questions)
+        # trigger_embs = self._batch_encode(batch_size=1000, dataset=triggers)
+        embs = self._batch_encode(batch_size=2000, dataset=concat_texts)
         # 根据map拼接embs，用于相似度计算
-        for idx, m in enumerate(text_trigger_question_map):
-            ques_emb = question_embs[idx]
-            text_emb = text_embs[m['text_idx']]
-            tri_emb = trigger_embs[m['trigger_idx']]
-            embs.append(torch.from_numpy(np.concatenate(
-                (text_emb, tri_emb, ques_emb), axis=None)))
+        # for idx, m in enumerate(concat_embs):
+        #     ques_emb = question_embs[idx]
+        #     # text_emb = text_embs[m['text_idx']]
+        #     tri_emb = trigger_embs[m['trigger_idx']]
+        #     embs.append(torch.from_numpy(np.concatenate(
+        #         (tri_emb, ques_emb), axis=None)))
 
         return embs, tuples
 
-    def sim_match(self, text_embs, demo_embs):
+    def sim_match(self, text_embs, demo_embs, rank=1):
         most_sim = util.semantic_search(text_embs, demo_embs, top_k=2)
         ret = []
         for top2_list in most_sim:
-            ret.append(top2_list[1])
+            ret.append(top2_list[rank])
         return ret
 
 

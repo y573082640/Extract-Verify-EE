@@ -37,7 +37,7 @@ class Predictor:
         for t in tqdm.tqdm(texts):
             event_list = {
                 "id":t[1],
-                'text':t[0],
+                # 'text':t[0],
                 'event_list':[]
             }
             t_text = t[0]
@@ -61,11 +61,11 @@ class Predictor:
             
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True,no_log=True)
-    obj_args = EeArgs('obj')
+    ner_args = EeArgs('ner', use_lexicon=True,log=False)
+    obj_args = EeArgs('obj', use_lexicon=False,log=True)
     predict_tool = Predictor(ner_args, obj_args)
     texts = []
-    with open('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_dev.json', encoding='utf-8') as f:
+    with open('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json', encoding='utf-8') as f:
         f = f.read().strip().split("\n")
         for d in f:
             d = json.loads(d)
