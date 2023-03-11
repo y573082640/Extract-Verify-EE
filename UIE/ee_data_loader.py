@@ -47,11 +47,176 @@ class ListDataset(Dataset):
     def load_data(file_path, tokenizer, max_len, entity_label, tasks):
         return file_path
 
+# 加载实体识别数据集
+class EeDatasetPredictor(ListDataset):
+    def load_data(self,  filename, tokenizer, max_len, entity_label=None, tasks=None):
+        ret = []
+        if 'ner' in self.args.tasks:
+            with open(filename, encoding='utf-8') as f:
+                f = f.read().strip().split("\n")
+                for d in f[:500]:
+                    d = json.loads(d)
+                    text = d["text"]
+                    id = d['id']
+                    text = text.replace('\n',"。").replace(' ',",")
+                    tokens_b = [i for i in text]
+
+                    if self.args.use_lexicon:
+                        augment_Ids = generate_instance_with_gaz(
+                            ['CLS']+tokens_b[:self.args.max_seq_len-2]+['SEP'], self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
+                            self.args.gaz_alphabet, self.args.gaz_alphabet_count, self.args.gaz, self.args.max_seq_len)
+                    else:
+                        augment_Ids = []
+
+                    ret.append({
+                        'ner_tokens':tokens_b,
+                        "text_id":id,
+                        'augment_Ids':augment_Ids
+                    })
+        
+        elif 'obj' in self.args.tasks:
+            pass
+            
+        return ret
+
+class EeCollatePredictor:
+    def __init__(self,
+                 max_len,
+                 tokenizer,
+                 tasks,
+                 args):
+        self.maxlen = max_len
+        self.tokenizer = tokenizer
+        self.tasks = tasks
+        self.args = args
+
+    def collate_fn(self, batch):
+        batch_ner_token_ids = []
+        batch_raw_tokens = []  # 用于bad-case分析时获取结果
+        batch_ner_attention_mask = []
+        batch_ner_token_type_ids = []
+        batch_obj_token_ids = []
+        batch_obj_attention_mask = []
+        batch_obj_token_type_ids = []
+        batch_augment_Ids = []
+        batch_sim_score = []
+        for i, data in enumerate(batch):
+
+            augment_Ids = data["augment_Ids"]
+            batch_augment_Ids.append(augment_Ids)
+
+            if "ner" in self.tasks:
+                tokens = data["ner_tokens"]
+                encode_dict = self.args.tokenizer.encode_plus(text=tokens,
+                                                max_length=self.args.max_seq_len,
+                                                padding="max_length",
+                                                truncation=True,
+                                                return_token_type_ids=True,
+                                                return_attention_mask=True)
+                ner_token_ids = encode_dict['input_ids']
+                ner_token_type_ids = encode_dict['token_type_ids']
+                ner_attention_mask = encode_dict['attention_mask']
+
+                batch_ner_token_ids.append(ner_token_ids)
+                batch_ner_attention_mask.append(ner_attention_mask)
+                batch_ner_token_type_ids.append(ner_token_type_ids)
+                batch_raw_tokens.append(tokens)
+
+            elif "obj" in self.tasks:
+                obj_tokens = data["obj_tokens"]
+                raw_tokens = obj_tokens
+                obj_tokens = self.tokenizer.convert_tokens_to_ids(obj_tokens)
+                obj_start_labels = data["obj_start_labels"]
+                obj_end_labels = data["obj_end_labels"]
+                obj_token_type_ids = data["obj_token_type_ids"]
+                sim_score = data['sim_score']
+
+                if len(obj_tokens) < self.maxlen:
+                    obj_start_labels = obj_start_labels + \
+                        [0] * (self.maxlen - len(obj_tokens))
+                    obj_end_labels = obj_end_labels + \
+                        [0] * (self.maxlen - len(obj_tokens))
+                    obj_attention_mask = [
+                        1] * len(obj_tokens) + [0] * (self.maxlen - len(obj_tokens))
+                    obj_token_type_ids = obj_token_type_ids + [0] * \
+                        (self.maxlen - len(obj_tokens))
+                    obj_tokens = obj_tokens + [0] * \
+                        (self.maxlen - len(obj_tokens))
+                else:
+                    obj_attention_mask = [1] * self.maxlen
+
+                batch_obj_token_ids.append(obj_tokens)
+                batch_obj_attention_mask.append(obj_attention_mask)
+                batch_obj_token_type_ids.append(obj_token_type_ids)
+                batch_raw_tokens.append(raw_tokens)
+                batch_sim_score.append(sim_score)
+
+        res = {}
+
+        if "ner" in self.tasks:
+            try:
+                batch_ner_token_ids = convert_list_to_tensor(batch_ner_token_ids)
+                batch_ner_attention_mask = convert_list_to_tensor(
+                    batch_ner_attention_mask)
+                batch_ner_token_type_ids = convert_list_to_tensor(
+                    batch_ner_token_type_ids)
+            except Exception as e:
+                logging.info(e)
+                logging.info(batch_ner_token_ids)
+                for i in batch_ner_token_ids:
+                    logging.info(len(i))
+                    logging.info(isinstance(i,list))
+                exit(0)
+
+            ner_res = {
+                "ner_input_ids": batch_ner_token_ids,
+                "ner_attention_mask": batch_ner_attention_mask,
+                "ner_token_type_ids": batch_ner_token_type_ids,
+            }
+
+            res = ner_res
+
+        elif "obj" in self.tasks:
+            batch_obj_token_ids = convert_list_to_tensor(batch_obj_token_ids)
+            batch_obj_attention_mask = convert_list_to_tensor(
+                batch_obj_attention_mask)
+
+            batch_obj_token_type_ids = convert_list_to_tensor(
+                batch_obj_token_type_ids)
+            batch_obj_start_labels = convert_list_to_tensor(
+                batch_obj_start_labels, dtype=torch.float)
+            batch_obj_end_labels = convert_list_to_tensor(
+                batch_obj_end_labels, dtype=torch.float)
+            batch_sim_score = convert_list_to_tensor(
+                batch_sim_score, dtype=torch.float)
+
+            sbj_obj_res = {
+                "re_obj_input_ids": batch_obj_token_ids,
+                "re_obj_attention_mask": batch_obj_attention_mask,
+                "re_obj_token_type_ids": batch_obj_token_type_ids,
+                "re_obj_start_labels": batch_obj_start_labels,
+                "re_obj_end_labels": batch_obj_end_labels,
+                'batch_sim_score': batch_sim_score
+            }
+
+            res = sbj_obj_res
+
+        # 用于解码
+        res['raw_tokens'] = batch_raw_tokens
+        # 用于词典增强
+        if self.args.use_lexicon:
+            batch_augment_Ids = batchify_augment_ids(
+                batch_augment_Ids, self.maxlen)
+        res['batch_augment_Ids'] = batch_augment_Ids
+
+        return res
+        
+
 
 # 加载实体识别数据集
 class EeDataset(ListDataset):
 
-    def load_data(self, filename, tokenizer, max_len, entity_label=None, tasks=None, gaz_file=None):
+    def load_data(self, filename, tokenizer, max_len, entity_label=None, tasks=None):
         ner_data = []
         obj_data = []
         ent_label2id = {label: i for i, label in enumerate(entity_label)}

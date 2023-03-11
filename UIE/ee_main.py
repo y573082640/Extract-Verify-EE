@@ -4,8 +4,8 @@ sys.path.append('..')
 from UIE.utils.question_maker import get_question_for_argument, creat_argu_labels, creat_argu_token, creat_demo
 from UIE.utils.lexicon_functions import generate_instance_with_gaz, batchify_augment_ids
 from UIE.utils.metrics import calculate_metric, word_level_calculate_metric, classification_report, get_p_r_f, get_argu_p_r_f
-from UIE.utils.decode import ner_decode, ner_decode2, bj_decode, sigmoid
-from UIE.ee_data_loader import EeDataset, EeCollate
+from UIE.utils.decode import ner_decode_batch, ner_decode2, bj_decode, sigmoid, depart_ner_output_batch
+from UIE.ee_data_loader import EeDataset, EeCollate, EeCollatePredictor, EeDatasetPredictor
 from UIE.config import EeArgs
 from UIE.model import UIEModel
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
@@ -16,7 +16,7 @@ import torch
 import numpy as np
 import time
 import logging
-
+import tqdm
 
 class EePipeline:
     def __init__(self, model, args):
@@ -182,39 +182,25 @@ class EePipeline:
                                 ner_end_labels=batch_data["ner_end_labels"],
                                 augment_Ids=batch_data["batch_augment_Ids"]
                                 )
-
-            # (num_labels,batch_size,max_len)
-            ner_start_logits = output["ner_output"]["ner_start_logits"]
-            ner_end_logits = output["ner_output"]["ner_end_logits"]
-            batch_size = batch_data['ner_input_ids'].size(0)
-
-            for i in range(batch_size):
-                # 对一条数据上不同label的预测值
-                ner_s_logits.append([logit[i, :]
-                                    for logit in ner_start_logits])
-                ner_e_logits.append([logit[i, :] for logit in ner_end_logits])
-
-            raw_tokens += batch_data['raw_tokens']
-
+            
             tmp_ner_mask = batch_data["ner_attention_mask"].detach().cpu()
             tmp_ner_start_labels = batch_data["ner_start_labels"].detach(
             ).cpu()
             tmp_ner_end_labels = batch_data["ner_end_labels"].detach().cpu()
 
             if ner_start_labels is None:
-
                 ner_masks = tmp_ner_mask
                 ner_start_labels = tmp_ner_start_labels
                 ner_end_labels = tmp_ner_end_labels
             else:
-
                 ner_masks = np.append(ner_masks, tmp_ner_mask, axis=0)
                 ner_start_labels = np.append(
                     ner_start_labels, tmp_ner_start_labels, axis=0)
                 ner_end_labels = np.append(
                     ner_end_labels, tmp_ner_end_labels, axis=0)
+                            
+            ner_s_logits, ner_e_logits,raw_tokens = depart_ner_output_batch(output,batch_data,ner_s_logits, ner_e_logits,raw_tokens)
 
-        print(ner_start_labels.shape)
         ner_outputs = {
             "ner_s_logits": ner_s_logits,  # (1492,label_num,max_len)
             "ner_e_logits": ner_e_logits,
@@ -309,7 +295,7 @@ class EePipeline:
                         return_report=False):
         role_metric, total_count = self.get_ner_metrics_helper(
             ner_outputs, return_report)
-        print(role_metric)
+        # print(role_metric)
         mirco_metrics = np.sum(role_metric, axis=0)
         mirco_metrics = get_p_r_f(
             mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
@@ -533,51 +519,48 @@ class EePipeline:
             print(output_info)
             print(metrics["report"])
 
-    def predict(self, textb, event_type=None, trigger=None, trigger_start_index=None):
+    def predict(self, filepath=None):
 
         self.model.eval()
         self.model.to(self.args.device)
         with torch.no_grad():
             if "ner" in self.args.tasks:
-                tokens_b = [i for i in textb]
-                bert_token = ['CLS']+tokens_b+['SEP']
-                encode_dict = self.args.tokenizer.encode_plus(text=tokens_b,
-                                                              max_length=self.args.max_seq_len,
-                                                              padding="max_length",
-                                                              truncating="only_first",
-                                                              return_token_type_ids=True,
-                                                              return_attention_mask=True)
-                # tokens = ['[CLS]'] + tokens + ['[SEP]']
-                token_ids = torch.from_numpy(
-                    np.array(encode_dict['input_ids'])).unsqueeze(0).to(self.args.device)
-                attention_masks = torch.from_numpy(np.array(encode_dict['attention_mask'])).unsqueeze(0).to(
-                    self.args.device)
-                token_type_ids = torch.from_numpy(
-                    np.array(encode_dict['token_type_ids'])).unsqueeze(0).to(self.args.device)
 
-                if self.args.use_lexicon:
-                    augment_Ids = generate_instance_with_gaz(
-                        bert_token, self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
-                        self.args.gaz_alphabet, self.args.gaz_alphabet_count, self.args.gaz, self.args.max_seq_len)
-                    # augment_Ids转变为torch向量
-                    augment_Ids = batchify_augment_ids(
-                        [augment_Ids], self.args.max_seq_len)
-                else:
-                    augment_Ids = []
+                ner_s_logits, ner_e_logits,raw_tokens = [],[],[]
+                test_dataset = EeDatasetPredictor(file_path=filepath,
+                                        tokenizer=self.args.tokenizer,
+                                        max_len=self.args.max_seq_len,
+                                        entity_label=self.args.entity_label,
+                                        tasks=self.args.tasks,
+                                        args=self.args)
+                
+                collate = EeCollatePredictor(max_len=self.args.max_seq_len,
+                                    tokenizer=self.args.tokenizer, 
+                                    tasks=self.args.tasks, 
+                                    args=self.args)
+                
+                test_loader = DataLoader(dataset=test_dataset,
+                                        batch_size=self.args.eval_batch_size,
+                                        shuffle=False,
+                                        collate_fn=collate.collate_fn)
+                
+                for batch_data in tqdm.tqdm(test_loader):
+                    for key in batch_data.keys():
+                        if key not in self.args.ignore_key:
+                            batch_data[key] = batch_data[key].to(self.args.device)
+                    output = self.model(ner_input_ids=batch_data["ner_input_ids"],
+                                        ner_token_type_ids=batch_data["ner_token_type_ids"],
+                                        ner_attention_mask=batch_data["ner_attention_mask"],
+                                        augment_Ids=batch_data["batch_augment_Ids"]
+                                        )                
 
-                output = self.model(
-                    ner_input_ids=token_ids,
-                    ner_token_type_ids=token_type_ids,
-                    ner_attention_mask=attention_masks,
-                    augment_Ids=augment_Ids
-                )
+                    ner_s_logits, ner_e_logits,raw_tokens = depart_ner_output_batch(output,batch_data,ner_s_logits, ner_e_logits,raw_tokens)
 
-                start_logits = output["ner_output"]["ner_start_logits"]
-                end_logits = output["ner_output"]["ner_end_logits"]
 
-                pred_entities = ner_decode(
-                    start_logits, end_logits, textb, self.args.ent_id2label)
-                return dict(pred_entities)
+                pred_entities = ner_decode_batch(
+                    ner_s_logits, ner_e_logits,raw_tokens, self.args.ent_id2label)
+                
+                return pred_entities
 
             # tokens = ['[CLS]'] + tokens + ['[SEP]'] + tokens + + ['[SEP]']
             elif "obj" in self.args.tasks:
