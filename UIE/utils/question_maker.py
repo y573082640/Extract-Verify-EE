@@ -143,59 +143,84 @@ class Sim_scorer:
 
         return sentence_embeddings.cpu()
 
-    def create_embs_and_tuples(self, filename):
+    def create_embs_and_tuples(self, filename=None, data_list=None, label2role=False):
         concat_texts = []
         embs = []
         tuples = []
-        # 记录所有的
-        with open(filename, encoding='utf-8') as f:
-            f = f.read().strip().split("\n")
-            for evt_idx, d in enumerate(f):
-                d = json.loads(d)
-                text = d["text"]
+        if filename is not None:
+            # 用于训练和预测
+            with open(filename, encoding='utf-8') as f:
+                f = f.read().strip().split("\n")
+                for evt_idx, d in enumerate(f):
+                    d = json.loads(d)
+                    text = d["text"]
 
-                event_list = d["event_list"]
-                if len(text) == 0:
-                    continue
+                    event_list = d["event_list"]
+                    if len(text) == 0:
+                        continue
 
-                for tgr_idx, event in enumerate(event_list):
-                    event_type = event["event_type"]
-                    arguments = event["arguments"]
-                    trigger = event["trigger"]
+                    for tgr_idx, event in enumerate(event_list):
+                        event_type = event["event_type"]
+                        arguments = event["arguments"]
+                        trigger = event["trigger"]
 
-                    for aru_idx, argument in enumerate(arguments):
-                        role = argument["role"]
-                        question = get_question_for_argument(
-                            event_type=event_type, role=role)
-                        # 文本越短越好匹配，考虑四个要素：类型、角色、触发词和文本长度。
-                        concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
-                            question, trigger, len(text)))
-                        tuples.append({
-                            'text': text,
-                            'trigger': trigger,
-                            'question': question,
-                            'trigger_start_index': event["trigger_start_index"],
-                            'argument': argument["argument"],
-                            'argument_start_index': argument["argument_start_index"],
-                            'role': argument["role"],
-                            'event_type': event["event_type"]
-                        })
+                        for aru_idx, argument in enumerate(arguments):
+                            role = argument["role"]
+                            question = get_question_for_argument(
+                                event_type=event_type, role=role)
+                            # 文本越短越好匹配，考虑四个要素：类型、角色、触发词和文本长度。
+                            concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
+                                question, trigger, len(text)))
+                            tuples.append({
+                                'text': text,
+                                'trigger': trigger,
+                                'question': question,
+                                'trigger_start_index': event["trigger_start_index"],
+                                'argument': argument["argument"],
+                                'argument_start_index': argument["argument_start_index"],
+                                'role': argument["role"],
+                                'event_type': event["event_type"]
+                            })
+        elif data_list is not None and label2role is not None:
+            """
+            用于推理
+            event = {
+                "event_type":e_type,
+                'text':text,
+                'trigger':trg_tuple[0],
+                'trigger_start_index':trg_tuple[1],
+                'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
+            }
+            """
+            for tgr_idx, event in enumerate(data_list):
+                event_type = event["event_type"]
+                trigger = event["trigger"]
+                argu_types = label2role[event_type]
+                textb = event["text"]
+                trigger_start_index = event["trigger_start_index"]
+                event_id = event["event_id"]
+                for role in argu_types:
+                    # 组织行为-游行_时间
+                    # 此处是为了配合get_question_for_argument函数，转变为"时间"
+                    role = role.split('_')[-1]
+                    q = get_question_for_argument(event_type, role)
+                    text_tuple = {
+                        'text': textb,
+                        'trigger': trigger,
+                        'question': q,
+                        'trigger_start_index': trigger_start_index,
+                        'argument': None,
+                        'argument_start_index': None,
+                        'role': role,
+                        'event_type': event_type,
+                        'event_id': event_id
+                    }
+                    concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
+                        q, trigger, len(textb)))
+                    tuples.append(text_tuple)
 
-        # 分批转化为embs
-
-        # text_embs = self._batch_encode(batch_size=1000, dataset=texts)
-        # type。role。trigger。
-        # question_embs = self._batch_encode(batch_size=1000, dataset=questions)
-        # trigger_embs = self._batch_encode(batch_size=1000, dataset=triggers)
         embs = self._batch_encode(batch_size=2000, dataset=concat_texts)
-        # 根据map拼接embs，用于相似度计算
-        # for idx, m in enumerate(concat_embs):
-        #     ques_emb = question_embs[idx]
-        #     # text_emb = text_embs[m['text_idx']]
-        #     tri_emb = trigger_embs[m['trigger_idx']]
-        #     embs.append(torch.from_numpy(np.concatenate(
-        #         (tri_emb, ques_emb), axis=None)))
-
+        
         return embs, tuples
 
     def sim_match(self, text_embs, demo_embs, rank=1):

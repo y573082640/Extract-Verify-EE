@@ -35,7 +35,7 @@ class EeArgs:
         self.demo_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
         self.sim_model='model_hub/paraphrase-MiniLM-L6-v2'
-        self.ignore_key = ['raw_tokens', 'batch_augment_Ids']
+        self.ignore_key = ['argu_roles','raw_tokens', 'batch_augment_Ids','text_ids']
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
         self.ent_label2id = {}

@@ -34,6 +34,7 @@ class ListDataset(Dataset):
                 file_path, tokenizer, max_len, entity_label, tasks)
         elif isinstance(data, list):
             self.data = data
+            self.process_list_data()
         else:
             raise ValueError(
                 'The input args shall be str format file_path / list format dataset')
@@ -47,37 +48,101 @@ class ListDataset(Dataset):
     def load_data(file_path, tokenizer, max_len, entity_label, tasks):
         return file_path
 
+    def process_list_data(self):
+        pass
+
 # 加载实体识别数据集
+
+
 class EeDatasetPredictor(ListDataset):
+
+    def process_list_data(self):
+        """
+        event = {
+            "event_type":e_type,
+            'text':text,
+            'trigger':trg_tuple[0],
+            'trigger_start_index':trg_tuple[1],
+            'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
+        }
+        """
+        sim_scorer = self.args.sim_scorer
+        text_embs, text_tuples = sim_scorer.create_embs_and_tuples(
+            data_list=self.data, label2role=self.args.label2role)
+        demo_embs = self.args.demo_embs
+        demo_tuples = self.args.demo_tuples
+        most_sim = sim_scorer.sim_match(
+            text_embs, demo_embs, rank=0)  # {corpus_id,score} rank表示取最相似的还是次相似的
+        ret = []
+        for idx, text_tuple in enumerate(text_tuples):
+            sim_id = most_sim[idx]['corpus_id']
+            demo = creat_demo(demo_tuples[sim_id])
+            obj_tokens, token_type_ids = creat_argu_token(
+                text_tuple, demo, self.args.max_seq_len)
+            if self.args.use_lexicon:
+                augment_Ids = generate_instance_with_gaz(
+                    obj_tokens,
+                    self.args.pos_alphabet,
+                    self.args.word_alphabet,
+                    self.args.biword_alphabet,
+                    self.args.gaz_alphabet,
+                    self.args.gaz_alphabet_count,
+                    self.args.gaz,
+                    self.args.max_seq_len)
+                augment_Ids = batchify_augment_ids(
+                    [augment_Ids], self.args.max_seq_len)
+            else:
+                augment_Ids = []
+
+            ret.append({
+                'obj_tokens': obj_tokens,
+                'token_type_ids': token_type_ids,
+                'augment_Ids': augment_Ids,
+                'event_id': text_tuple['event_id'],
+                'role': text_tuple['role'],
+            })
+
+        self.data = ret
+        logging.info('data_list数据预处理完成')
+        return
+
     def load_data(self,  filename, tokenizer, max_len, entity_label=None, tasks=None):
         ret = []
         if 'ner' in self.args.tasks:
             with open(filename, encoding='utf-8') as f:
                 f = f.read().strip().split("\n")
-                for d in f[:500]:
+                for d in f:
                     d = json.loads(d)
                     text = d["text"]
                     id = d['id']
-                    text = text.replace('\n',"。").replace(' ',",")
+
+                    # 简单预处理
+                    text = text.replace('\n', "。").replace(' ', ",")
+                    if text[-1] != '。':
+                        text += '。'
+
                     tokens_b = [i for i in text]
 
                     if self.args.use_lexicon:
                         augment_Ids = generate_instance_with_gaz(
-                            ['CLS']+tokens_b[:self.args.max_seq_len-2]+['SEP'], self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
+                            ['CLS']+tokens_b[:self.args.max_seq_len-2]+[
+                                'SEP'], self.args.pos_alphabet, self.args.word_alphabet, self.args.biword_alphabet,
                             self.args.gaz_alphabet, self.args.gaz_alphabet_count, self.args.gaz, self.args.max_seq_len)
                     else:
                         augment_Ids = []
 
                     ret.append({
-                        'ner_tokens':tokens_b,
-                        "text_id":id,
-                        'augment_Ids':augment_Ids
+                        'ner_tokens': tokens_b,
+                        "text_id": id,
+                        'augment_Ids': augment_Ids
                     })
-        
+
         elif 'obj' in self.args.tasks:
+            # obj直接读取list了
             pass
-            
+
         return ret
+
 
 class EeCollatePredictor:
     def __init__(self,
@@ -92,14 +157,16 @@ class EeCollatePredictor:
 
     def collate_fn(self, batch):
         batch_ner_token_ids = []
-        batch_raw_tokens = []  # 用于bad-case分析时获取结果
         batch_ner_attention_mask = []
         batch_ner_token_type_ids = []
         batch_obj_token_ids = []
         batch_obj_attention_mask = []
         batch_obj_token_type_ids = []
+        batch_argu_roles = []  # 用于构建提交文件
+        batch_raw_tokens = []  # 用于构建输出
+        batch_text_ids = []  # 用于构建提交文件
         batch_augment_Ids = []
-        batch_sim_score = []
+
         for i, data in enumerate(batch):
 
             augment_Ids = data["augment_Ids"]
@@ -107,12 +174,13 @@ class EeCollatePredictor:
 
             if "ner" in self.tasks:
                 tokens = data["ner_tokens"]
+                ids = data["text_id"]
                 encode_dict = self.args.tokenizer.encode_plus(text=tokens,
-                                                max_length=self.args.max_seq_len,
-                                                padding="max_length",
-                                                truncation=True,
-                                                return_token_type_ids=True,
-                                                return_attention_mask=True)
+                                                              max_length=self.args.max_seq_len,
+                                                              padding="max_length",
+                                                              truncation=True,
+                                                              return_token_type_ids=True,
+                                                              return_attention_mask=True)
                 ner_token_ids = encode_dict['input_ids']
                 ner_token_type_ids = encode_dict['token_type_ids']
                 ner_attention_mask = encode_dict['attention_mask']
@@ -121,21 +189,17 @@ class EeCollatePredictor:
                 batch_ner_attention_mask.append(ner_attention_mask)
                 batch_ner_token_type_ids.append(ner_token_type_ids)
                 batch_raw_tokens.append(tokens)
+                batch_text_ids.append(ids)
 
             elif "obj" in self.tasks:
                 obj_tokens = data["obj_tokens"]
+                role = data['role']
+                event_id = data['event_id']
                 raw_tokens = obj_tokens
                 obj_tokens = self.tokenizer.convert_tokens_to_ids(obj_tokens)
-                obj_start_labels = data["obj_start_labels"]
-                obj_end_labels = data["obj_end_labels"]
-                obj_token_type_ids = data["obj_token_type_ids"]
-                sim_score = data['sim_score']
+                obj_token_type_ids = data["token_type_ids"]
 
                 if len(obj_tokens) < self.maxlen:
-                    obj_start_labels = obj_start_labels + \
-                        [0] * (self.maxlen - len(obj_tokens))
-                    obj_end_labels = obj_end_labels + \
-                        [0] * (self.maxlen - len(obj_tokens))
                     obj_attention_mask = [
                         1] * len(obj_tokens) + [0] * (self.maxlen - len(obj_tokens))
                     obj_token_type_ids = obj_token_type_ids + [0] * \
@@ -149,13 +213,15 @@ class EeCollatePredictor:
                 batch_obj_attention_mask.append(obj_attention_mask)
                 batch_obj_token_type_ids.append(obj_token_type_ids)
                 batch_raw_tokens.append(raw_tokens)
-                batch_sim_score.append(sim_score)
+                batch_argu_roles.append(role)
+                batch_text_ids.append(event_id)
 
         res = {}
 
         if "ner" in self.tasks:
             try:
-                batch_ner_token_ids = convert_list_to_tensor(batch_ner_token_ids)
+                batch_ner_token_ids = convert_list_to_tensor(
+                    batch_ner_token_ids)
                 batch_ner_attention_mask = convert_list_to_tensor(
                     batch_ner_attention_mask)
                 batch_ner_token_type_ids = convert_list_to_tensor(
@@ -165,7 +231,7 @@ class EeCollatePredictor:
                 logging.info(batch_ner_token_ids)
                 for i in batch_ner_token_ids:
                     logging.info(len(i))
-                    logging.info(isinstance(i,list))
+                    logging.info(isinstance(i, list))
                 exit(0)
 
             ner_res = {
@@ -180,29 +246,22 @@ class EeCollatePredictor:
             batch_obj_token_ids = convert_list_to_tensor(batch_obj_token_ids)
             batch_obj_attention_mask = convert_list_to_tensor(
                 batch_obj_attention_mask)
-
             batch_obj_token_type_ids = convert_list_to_tensor(
                 batch_obj_token_type_ids)
-            batch_obj_start_labels = convert_list_to_tensor(
-                batch_obj_start_labels, dtype=torch.float)
-            batch_obj_end_labels = convert_list_to_tensor(
-                batch_obj_end_labels, dtype=torch.float)
-            batch_sim_score = convert_list_to_tensor(
-                batch_sim_score, dtype=torch.float)
 
             sbj_obj_res = {
                 "re_obj_input_ids": batch_obj_token_ids,
                 "re_obj_attention_mask": batch_obj_attention_mask,
                 "re_obj_token_type_ids": batch_obj_token_type_ids,
-                "re_obj_start_labels": batch_obj_start_labels,
-                "re_obj_end_labels": batch_obj_end_labels,
-                'batch_sim_score': batch_sim_score
+                "argu_roles": batch_argu_roles,
             }
 
             res = sbj_obj_res
 
         # 用于解码
         res['raw_tokens'] = batch_raw_tokens
+        # 用于构建最终输出
+        res['text_ids'] = batch_text_ids
         # 用于词典增强
         if self.args.use_lexicon:
             batch_augment_Ids = batchify_augment_ids(
@@ -210,7 +269,6 @@ class EeCollatePredictor:
         res['batch_augment_Ids'] = batch_augment_Ids
 
         return res
-        
 
 
 # 加载实体识别数据集
@@ -292,17 +350,18 @@ class EeDataset(ListDataset):
                 sim_id = most_sim[idx]['corpus_id']
                 sim_score = most_sim[idx]['score']
 
-
                 demo = creat_demo(demo_tuples[sim_id])
                 argu_token, obj_token_type_ids = creat_argu_token(
                     text_tuple, demo, max_len)
                 argu_start_labels, argu_end_labels = creat_argu_labels(
                     argu_token, demo, text_tuple, max_len)
-                
+
                 logging.info('============')
                 logging.info(sim_score)
-                logging.info("".join(demo_tuples[sim_id]['question']+ "--" + demo_tuples[sim_id]['trigger']))
-                logging.info("".join(text_tuple['question'] + "--" + text_tuple['trigger']))
+                logging.info("".join(
+                    demo_tuples[sim_id]['question'] + "--" + demo_tuples[sim_id]['trigger']))
+                logging.info(
+                    "".join(text_tuple['question'] + "--" + text_tuple['trigger']))
 
                 if len(argu_start_labels) == 0:
                     continue
