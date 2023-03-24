@@ -13,7 +13,7 @@ import torch
 import json
 import numpy as np
 from time import time
-
+from datetime import datetime
 
 
 class Predictor:
@@ -94,11 +94,13 @@ class Predictor:
         st = time()
         ner_result = self.predict_ner(filepath)
         argu_input = self.decode_ner_to_obj(ner_result)
+        torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
+        torch.cuda.empty_cache()
         answer = self.accumulate_answer(argu_input, obj_result)
         with open(output, 'a+') as fp:
             for a in answer:
-                json.dump(a, fp)
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
                 fp.write('\n')
         ed = time()
         logging.info('预测结果已输入文件:' + str(output))
@@ -111,6 +113,6 @@ if __name__ == "__main__":
     obj_args = EeArgs('obj', use_lexicon=False, log=True)
     predict_tool = Predictor(ner_args, obj_args)
     t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json'
-    output_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output--%s.json' % (
-        str(time()))
+    output_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output %s.json' % (
+        datetime.fromtimestamp(int(time())))
     predict_tool.joint_predict(t_path, output_path)

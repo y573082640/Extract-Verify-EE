@@ -219,7 +219,7 @@ class Sim_scorer:
                         q, trigger, len(textb)))
                     tuples.append(text_tuple)
 
-        embs = self._batch_encode(batch_size=2000, dataset=concat_texts)
+        embs = self._batch_encode(batch_size=256, dataset=concat_texts)
         
         return embs, tuples
 

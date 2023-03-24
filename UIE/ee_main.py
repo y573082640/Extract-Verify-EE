@@ -626,7 +626,7 @@ class EePipeline:
                     tmp_mask = batch_data["re_obj_attention_mask"].detach(
                     ).cpu()
 
-                    if start_logits.ndimension < 2:
+                    if start_logits.dim() < 2:
                         start_logits = start_logits.unsqueeze(0)
                         end_logits = end_logits.unsqueeze(0)
 
@@ -656,114 +656,6 @@ class EePipeline:
                 logging.info("论元预测完毕")
 
                 return ret
-
-
-
-                # argu_types = self.args.label2role[event_type]
-                # text_tuples = []
-                # concat_texts = []
-                # for role in argu_types:
-                #     # 组织行为-游行_时间
-                #     # 此处是为了配合get_question_for_argument函数，转变为"时间"
-                #     role = role.split('_')[-1]
-                #     q = get_question_for_argument(event_type, role)
-                #     text_tuple = {
-                #         'text': textb,
-                #         'trigger': trigger,
-                #         'question': q,
-                #         'trigger_start_index': trigger_start_index,
-                #         'argument': None,
-                #         'argument_start_index': None,
-                #         'role': role,
-                #         'event_type': event_type
-                #     }
-                #     concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
-                #         q, trigger, len(textb)))
-                #     text_tuples.append(text_tuple)
-
-                # sim_scorer = self.args.sim_scorer
-                # text_embs = sim_scorer.get_sentence_embedding(concat_texts)
-                # demo_embs = self.args.demo_embs
-                # demo_tuples = self.args.demo_tuples
-                # most_sim = sim_scorer.sim_match(
-                #     text_embs, demo_embs, rank=0)  # {corpus_id,score} rank表示取最相似的还是次相似的
-                # ret = []
-                # for idx, text_tuple in enumerate(text_tuples):
-                #     sim_id = most_sim[idx]['corpus_id']
-                #     sim_score = 1 if most_sim[idx]['score'] > 0.75 else 0
-                #     demo = creat_demo(demo_tuples[sim_id])
-                #     tokens, token_type_ids = creat_argu_token(
-                #         text_tuple, demo, self.args.max_seq_len)
-                #     if self.args.use_lexicon:
-                #         augment_Ids = generate_instance_with_gaz(
-                #             tokens,
-                #             self.args.pos_alphabet,
-                #             self.args.word_alphabet,
-                #             self.args.biword_alphabet,
-                #             self.args.gaz_alphabet,
-                #             self.args.gaz_alphabet_count,
-                #             self.args.gaz,
-                #             self.args.max_seq_len)
-                #         augment_Ids = batchify_augment_ids(
-                #             [augment_Ids], self.args.max_seq_len)
-                #     else:
-                #         augment_Ids = []
-
-                #     attention_mask = [1] * len(tokens)
-
-                #     if len(tokens) > self.args.max_seq_len:
-                #         tokens = tokens[:self.args.max_seq_len]
-                #         attention_mask = attention_mask[:self.args.max_seq_len]
-                #         token_type_ids = token_type_ids[:self.args.max_seq_len]
-
-                #     token_ids = self.args.tokenizer.convert_tokens_to_ids(
-                #         tokens)
-
-                #     # 对齐长度
-                #     token_ids = token_ids + [0] * \
-                #         (self.args.max_seq_len - len(token_ids))
-                #     attention_mask = attention_mask + \
-                #         [0] * (self.args.max_seq_len - len(attention_mask))
-                #     token_type_ids = token_type_ids + \
-                #         [0] * (self.args.max_seq_len - len(token_type_ids))
-                #     # 转换为torch
-                #     token_ids = torch.from_numpy(
-                #         np.array(token_ids)).unsqueeze(0).to(self.args.device)
-                #     attention_mask = torch.from_numpy(np.array(attention_mask)).unsqueeze(0).to(
-                #         self.args.device)
-                #     token_type_ids = torch.from_numpy(
-                #         np.array(token_type_ids)).unsqueeze(0).to(self.args.device)
-                #     sim_score = torch.from_numpy(
-                #         np.array([sim_score])).unsqueeze(0).to(self.args.device)
-
-                #     output = self.model(
-                #         re_obj_input_ids=token_ids,
-                #         re_obj_token_type_ids=token_type_ids,
-                #         re_obj_attention_mask=attention_mask,
-                #         augment_Ids=augment_Ids,
-                #         sim_scores=sim_score
-                #     )
-
-                #     start_logits = output["re_output"]["obj_start_logits"].detach(
-                #     ).cpu()
-                #     end_logits = output["re_output"]["obj_end_logits"].detach(
-                #     ).cpu()
-                #     length = sum(attention_mask.detach().cpu()[0])
-
-                #     pred_entities = bj_decode(
-                #         start_logits, end_logits, length, {0: "答案"})
-                #     values = pred_entities["答案"]
-                #     for v in values:
-                #         start = v[0]
-                #         end = v[1]
-                #         ans = "".join(tokens[start:end]).replace("[TGR]", "")
-                #         ret.append({
-                #             'role': text_tuple['role'],
-                #             'argument': ans,
-                #             # 'argu':"".join(tokens)
-                #         })
-                return ret
-
 
 if __name__ == '__main__':
     args = EeArgs('obj')
