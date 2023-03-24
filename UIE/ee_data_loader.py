@@ -391,7 +391,6 @@ class EeDataset(ListDataset):
                 obj_data.append(argu_data)
 
         logging.info("数据集构建完毕")
-        exit(0)
         return ner_data if "ner" in tasks else obj_data
 
 
@@ -548,8 +547,6 @@ if __name__ == "__main__":
     from transformers import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained('model_hub/chinese-bert-wwm-ext')
-    tokenizer.add_special_tokens(
-        {'additional_special_tokens': ['[DEMO]', '[ARG]', '[TGR]']})
     # 测试实体识别
     # ============================
     max_seq_len = 256

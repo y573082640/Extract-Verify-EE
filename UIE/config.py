@@ -60,8 +60,6 @@ class EeArgs:
             "cuda" if torch.cuda.is_available() else "cpu")
         # device = torch.device("cpu")
         self.tokenizer = BertTokenizer.from_pretrained(self.bert_dir)
-        self.tokenizer.add_special_tokens(
-            {'additional_special_tokens': ['[DEMO]', '[ARG]', '[TGR]']})
         # 下面是lexicon的
         # 完成alphabet构建
         self.use_lexicon = use_lexicon

@@ -32,17 +32,17 @@ def get_question_for_argument(event_type, role):
 
 def creat_demo(sim_tuple):
     """
-        从sim_tuple中提取相关信息，并插入特殊占位符，包括[TGR]，[ARG]，[DEMO]
+        从sim_tuple中提取相关信息，并插入特殊占位符，包括sptgr ，sparg，spdemo 
     """
     sim_trigger = sim_tuple['trigger']
     sim_trigger_start_index = sim_tuple['trigger_start_index']
     sim_text_tokens = [i for i in sim_tuple['text']]
-    sim_text_tokens.insert(sim_trigger_start_index, '[TGR]')
+    sim_text_tokens.insert(sim_trigger_start_index, 'sptgr')
     sim_text_tokens.insert(
-        sim_trigger_start_index + 1 + len(sim_trigger), '[TGR]')
-    demo = ['[DEMO]'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
-        sim_text_tokens + ['[SEP]', '答案是：[ARG]'] + \
-        [i for i in sim_tuple['argument']] + ['[DEMO]']
+        sim_trigger_start_index + 1 + len(sim_trigger), 'sptgr')
+    demo = ['spdemo'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
+        sim_text_tokens + ['[SEP]', '答案是：sparg'] + \
+        [i for i in sim_tuple['argument']] + ['spdemo']
     return demo
 
 
@@ -50,7 +50,7 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
     argu_start_labels = [0] * len(argu_token)
     argu_end_labels = [0] * len(argu_token)
 
-    # 因为text中多加了[TGR]
+    # 因为text中多加了sptgr 
     trigger = text_tuple["trigger"]
     trigger_start_index = text_tuple['trigger_start_index']
     # 用于增加对arg的偏置
@@ -87,8 +87,8 @@ def creat_argu_token(text_tuple, demo, max_len):
     # 用于增加对arg的偏置
     tgr1_index = trigger_start_index
     tgr2_index = trigger_start_index + 1 + len(trigger)
-    text_tokens.insert(tgr1_index, '[TGR]')
-    text_tokens.insert(tgr2_index, '[TGR]')
+    text_tokens.insert(tgr1_index, 'sptgr')
+    text_tokens.insert(tgr2_index, 'sptgr')
     pre_tokens = demo + [i for i in question] + ['[SEP]']
     if len(text_tokens) + len(pre_tokens) > max_len - 2:
         argu_token = (pre_tokens + text_tokens)[:max_len-2]
