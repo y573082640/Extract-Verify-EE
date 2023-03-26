@@ -345,7 +345,7 @@ class EeDataset(ListDataset):
             most_sim = sim_scorer.sim_match(
                 embs, demo_embs, rank=1 if filename == self.args.demo_path else 0)  # {corpus_id,score}
             logging.info('相似度匹配完成')
-            logging.info(1 if filename == self.args.demo_path else 0)
+            # logging.info(1 if filename == self.args.demo_path else 0)
             for idx, text_tuple in enumerate(tuples):
                 sim_id = most_sim[idx]['corpus_id']
                 sim_score = most_sim[idx]['score']
@@ -356,12 +356,12 @@ class EeDataset(ListDataset):
                 argu_start_labels, argu_end_labels = creat_argu_labels(
                     argu_token, demo, text_tuple, max_len)
 
-                logging.info('============')
-                logging.info(sim_score)
-                logging.info("".join(
-                    demo_tuples[sim_id]['question'] + "--" + demo_tuples[sim_id]['trigger']))
-                logging.info(
-                    "".join(text_tuple['question'] + "--" + text_tuple['trigger']))
+                # logging.info('============')
+                # logging.info(sim_score)
+                # logging.info("".join(
+                #     demo_tuples[sim_id]['question'] + "--" + demo_tuples[sim_id]['trigger']))
+                # logging.info(
+                #     "".join(text_tuple['question'] + "--" + text_tuple['trigger']))
 
                 if len(argu_start_labels) == 0:
                     continue

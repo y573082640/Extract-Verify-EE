@@ -17,13 +17,20 @@ gaz_dict = {
 
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True):
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, mlm_bert=False):
         self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
-        self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
-        self.save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(
-            self.data_dir, self.tasks[0], self.data_name)
+        
+        if mlm_bert:
+            self.bert_dir = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_label'
+            self.save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy_mlm.pt".format(
+                self.data_dir, self.tasks[0], self.data_name)        
+        else:
+            self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
+            self.save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(
+                self.data_dir, self.tasks[0], self.data_name)
+            
         self.train_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
         self.dev_path = "./data/{}/{}/duee_dev.json".format(
