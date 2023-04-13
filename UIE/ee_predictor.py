@@ -1,6 +1,6 @@
 import sys
 sys.path.append("..")
-
+from transformers import AutoModelForMaskedLM, AutoTokenizer, pipeline
 from UIE.ee_data_loader import EeDataset, EeCollate
 from torch.utils.data import DataLoader, RandomSampler
 from time import time
@@ -15,6 +15,33 @@ import numpy as np
 from time import time
 from datetime import datetime
 
+def chunks(lst, n):
+    # Yield successive n-sized chunks from lst.
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+def map_fn(example):
+    # 在文本中插入sptgr特殊标志
+    text = example['text']
+    trigger_start_index = example['trigger_start_index']
+    trigger = example['trigger']
+    text_tokens = [b for b in text]
+    tgr1_index = trigger_start_index
+    tgr2_index = trigger_start_index + 1 + len(trigger)
+    text_tokens.insert(tgr1_index, ' sptgr ')
+    text_tokens.insert(tgr2_index, ' sptgr ')
+    if not text_tokens[-1] == '。':
+        text_tokens.append("。")
+
+    text_tokens = ''.join(text_tokens)
+    # 构建问题和回答
+    event_type = example['event_type']
+    event_type = event_type.split('-')[-1]
+    que_str = '前文的{}事件包含的{}是 sparg {} sparg 吗？'.format(
+        event_type, example['role'], example['argument'])
+    v_tokens = text_tokens + '[SEP]问题：' + que_str + \
+        "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    return v_tokens
 
 class Predictor:
     def __init__(self, ner_args=None, obj_args=None):
@@ -51,6 +78,22 @@ class Predictor:
 
         return argu_list
 
+    def _create_verified_dataset(self, argu_input, obj_result):
+        dataset = []
+        ret = {}
+        # 构建事件
+        for e in argu_input:
+            if not ret.__contains__(e['text_id']):
+                ret[e['event_id']] = e
+
+        for argu in obj_result:
+            e = ret[argu['event_id']]
+            merged_object = {**e,**argu}
+            dataset.append(map_fn(merged_object))
+
+        return dataset
+
+    
     def accumulate_answer(self, argu_input, obj_result):
         ret = {}
         # 构建事件
@@ -90,6 +133,31 @@ class Predictor:
         ret = self.obj_pipeline.predict(data=argu_input)
         return ret
 
+    def verify_result(self, argu_input, obj_result, batch_size=32, model_path="checkpoints/ee/mlm_label"):
+        
+        datas = self._create_verified_dataset(argu_input, obj_result)
+        # 设置批量大小为32
+        # load your model and tokenizer from a local directory or a URL
+        model = AutoModelForMaskedLM.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        # create an unmasker object with the model and tokenizer
+        unmasker = pipeline("fill-mask", model=model, tokenizer=tokenizer, top_k=1)
+
+        results = []
+        # loop over each line in the file
+        for batch in chunks(datas, batch_size):
+            # call the unmasker on the batch
+            result = unmasker(batch)
+            # append the result to the list
+            results.extend(result)
+
+        ret = []
+        for i, result in enumerate(results):
+            if result[0]['token_str'] != '不':
+                ret.append(obj_result[i])
+        return ret
+    
     def joint_predict(self, filepath, output):
         st = time()
         ner_result = self.predict_ner(filepath)
@@ -97,8 +165,10 @@ class Predictor:
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
-        answer = self.accumulate_answer(argu_input, obj_result)
-        with open(output, 'a+') as fp:
+        verified_result = self.verify_result(argu_input, obj_result)
+        torch.cuda.empty_cache()
+        answer = self.accumulate_answer(argu_input, verified_result)
+        with open(output, 'w') as fp:
             for a in answer:
                 json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
                 fp.write('\n')
@@ -112,7 +182,7 @@ if __name__ == "__main__":
     ner_args = EeArgs('ner', use_lexicon=True, log=False,mlm_bert=True)
     obj_args = EeArgs('obj', use_lexicon=False, log=True,mlm_bert=True)
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json'
+    t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2_toy.json'
     output_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output %s.json' % (
         datetime.fromtimestamp(int(time())))
     predict_tool.joint_predict(t_path, output_path)

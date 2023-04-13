@@ -1,82 +1,79 @@
-# from transformers import BertTokenizer
-# import torch
-# gaz_dict = {
-#     50: "./data/embs/ctb.50d.vec",
-#     100: "./data/embs/tencent-d100/tencent-ailab-embedding-zh-d100-v0.2.0-s.txt",
-#     200: "./data/embs/tencent-d200/tencent-ailab-embedding-zh-d200-v0.2.0-s.txt"
-# }
-
-# bert_dir = "model_hub/chinese-bert-wwm-ext/"
-# tokenizer = BertTokenizer.from_pretrained(
-#     bert_dir, add_special_tokens=True, do_lower_case=False)
-
-# text = '又一起 sptgr 坠机事故 sptgr 发生，美国居民区燃起熊熊大火，机上人员已经丧生。[SEP]问题：前文包含坠机事件发生的时间,包含年、月、日、天、周、时、分、秒等吗？答案： unused4 unused5 不unused6 unused7 。'
-# encode_dict = tokenizer.encode(text)
-# decode_dict = tokenizer.decode(encode_dict)
-# word_id = tokenizer.convert_tokens_to_ids("hello")
-# k = torch.full((3,5),0.15)
-# msk = torch.zeros((3,5))
-# msk[0,0] = 4
-# msk[1,1] = 4
-# msk[2,2] = 4
-# msk = msk.eq(4)
-# msk = torch.roll(msk,1,-1)
-# k = k.masked_fill_(msk,1.0)
-# print(k)
 from transformers import AutoModelForMaskedLM, AutoTokenizer, pipeline
+from utils.question_maker import get_question_for_argument
 import json
 import tqdm
+from datasets import load_dataset
+import torch
 
-# load your model and tokenizer from a local directory or a URL
-model = AutoModelForMaskedLM.from_pretrained("checkpoints/ee/mlm_label")
-tokenizer = AutoTokenizer.from_pretrained("checkpoints/ee/mlm_label")
 
-# create an unmasker object with the model and tokenizer
-unmasker = pipeline("fill-mask", model=model, tokenizer=tokenizer, top_k=1)
+def chunks(lst, n):
+    # Yield successive n-sized chunks from lst.
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
-# open the .txt file with the texts to inference
-with open("/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/ee_obj_for_mlm_infer_exists.txt", "r") as f:
-    # create an empty list to store the results
+
+def map_fn(example):
+    # 在文本中插入sptgr特殊标志
+    text = example['text']
+    trigger_start_index = example['trigger_start_index']
+    trigger = example['trigger']
+    text_tokens = [b for b in text]
+    tgr1_index = trigger_start_index
+    tgr2_index = trigger_start_index + 1 + len(trigger)
+    text_tokens.insert(tgr1_index, ' sptgr ')
+    text_tokens.insert(tgr2_index, ' sptgr ')
+    if not text_tokens[-1] == '。':
+        text_tokens.append("。")
+
+    text_tokens = ''.join(text_tokens)
+    # 构建问题和回答
+    event_type = example['event_type']
+    event_type = event_type.split('-')[-1]
+    que_str = '前文的{}事件包含的{}是 sparg {} sparg 吗？'.format(
+        event_type, example['role'], example['argument'])
+    v_tokens = text_tokens + '[SEP]问题：' + que_str + \
+        "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    return v_tokens
+
+
+def verify_result(datas, batch_size=32, model_path='"checkpoints/ee/mlm_label"'):
+
+    # 设置批量大小为32
+    # load your model and tokenizer from a local directory or a URL
+    model = AutoModelForMaskedLM.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    # create an unmasker object with the model and tokenizer
+    unmasker = pipeline("fill-mask", model=model, tokenizer=tokenizer, top_k=1)
+
     results = []
-    # create an empty list to store the current batch of texts
-    batch = []
     # loop over each line in the file
-    for line in tqdm.tqdm(f.readlines()):
-        # strip the newline character
-        line = line.strip()
-        # append the line to the current batch
-        if len(line) > 0 and '[MASK]' in line:
-            batch.append(line)
-        # check if the batch size is reached
-        if len(batch) == 32:
-            
-            # call the unmasker on the batch
-            result = unmasker(batch)
-            # append the result to the list
-            results.extend(result)
-            # clear the current batch
-            batch = []
-    # check if there are any remaining texts in the batch
-    if len(batch) > 0:
-        # call the unmasker on the remaining batch
+    for batch in chunks(datas, batch_size):
+        # call the unmasker on the batch
         result = unmasker(batch)
         # append the result to the list
         results.extend(result)
 
-# optionally, write the results to another file
-with open("output/result_ee_obj_for_mlm_label_test_exists.json", "w") as f:
-    # loop over each result in the list
-    cnt = 0
-    total = 0
-    for result in results:
-        # write the result as a string to the file
-        total += 1
-        if result[0]['score'] < 0.7:
-            cnt += 1
-            result[0]['sequence'] = result[0]['sequence'].replace(" ", "").replace(
-                "unused4unused5", "").replace("unused6unused7", "").replace("sptgr", "").replace("sparg", "")
-            json.dump(result[0], f, ensure_ascii=False, separators=(',', ':'))
-            f.write("\n")
-    f.write("得分是：")
-    f.write(str(cnt/total))
-    f.write("\n")
+    ret = []
+    for i, result in enumerate(results):
+        if result[0]['token_str'] == '不':
+            ret.append(datas[i])
+    return ret
+
+# # optionally, write the results to another file
+# with open("output/obj_verify_toy.json", "w") as f:
+#     # loop over each result in the list
+#     cnt = 0
+#     total = 0
+#     for i,result in enumerate(results):
+#         # write the result as a string to the file
+#         total += 1
+#         if result[0]['score'] < 0.7:
+#             cnt += 1
+#         result[0]['sequence'] = result[0]['sequence'].replace(" ", "").replace(
+#             "unused4unused5", "").replace("unused6unused7", "").replace("sptgr", "").replace("sparg", "")
+#         json.dump(result[0], f, ensure_ascii=False, separators=(',', ':'))
+#         f.write("\n")
+#     f.write("得分是：")
+#     f.write(str(cnt/total))
+#     f.write("\n")
