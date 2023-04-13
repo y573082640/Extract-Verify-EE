@@ -636,7 +636,7 @@ class EePipeline:
                         masks = tmp_mask
                     else:
                         s_logits = np.append(s_logits, start_logits, axis=0)
-                        e_logits = np.append(s_logits, end_logits, axis=0)
+                        e_logits = np.append(e_logits, end_logits, axis=0)
                         masks = np.append(masks, tmp_mask, axis=0)
 
                     raw_tokens += batch_data['raw_tokens']
@@ -658,7 +658,13 @@ class EePipeline:
                 return ret
 
 if __name__ == '__main__':
-    args = EeArgs('obj',mlm_bert=True)
+    args = EeArgs('ner',use_lexicon=True)
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()
+
+    args = EeArgs('obj',log=False)
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
