@@ -1,6 +1,6 @@
 #!/bin/bash
 python run_mlm.py \
-    --model_name_or_path /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_label \
+    --model_name_or_path /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_mask_40 \
     --validation_file /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/ee_obj_for_mlm_test_exists.txt \
     --per_device_eval_batch_size 32 \
     --do_eval \

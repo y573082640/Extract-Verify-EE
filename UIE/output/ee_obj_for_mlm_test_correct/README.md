@@ -11,13 +11,13 @@ should probably proofread and complete it, then remove this comment. -->
 
 # ee_obj_for_mlm_test_correct
 
-This model is a fine-tuned version of [/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_label](https://huggingface.co//home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_label) on an unknown dataset.
+This model is a fine-tuned version of [/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_mask_40](https://huggingface.co//home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_mask_40) on an unknown dataset.
 It achieves the following results on the evaluation set:
-- eval_loss: 0.0773
-- eval_accuracy: 0.9799
-- eval_runtime: 23.6636
-- eval_samples_per_second: 254.569
-- eval_steps_per_second: 7.987
+- eval_loss: 0.1791
+- eval_accuracy: 0.9341
+- eval_runtime: 23.6915
+- eval_samples_per_second: 254.268
+- eval_steps_per_second: 7.978
 - step: 0
 
 ## Model description
@@ -47,7 +47,7 @@ The following hyperparameters were used during training:
 
 ### Framework versions
 
-- Transformers 4.28.0.dev0
+- Transformers 4.27.3
 - Pytorch 1.9.0+cu102
 - Datasets 2.10.1
 - Tokenizers 0.13.2
