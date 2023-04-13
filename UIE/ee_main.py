@@ -658,13 +658,6 @@ class EePipeline:
                 return ret
 
 if __name__ == '__main__':
-    
-    args = EeArgs('ner',use_lexicon=True,mlm_bert=True)
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-
     args = EeArgs('obj',mlm_bert=True)
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)

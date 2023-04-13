@@ -65,7 +65,7 @@ class Predictor:
                 "arguments": []
             }
         # 将论元填入事件
-        for argu in argu_input:
+        for argu in obj_result:
             text_id = argu['event_id'].split('——')[0]
             event_id = argu['event_id']
             argu_list = ret[text_id]['event_list'][event_id]['arguments']
@@ -109,8 +109,8 @@ class Predictor:
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True, log=False)
-    obj_args = EeArgs('obj', use_lexicon=False, log=True)
+    ner_args = EeArgs('ner', use_lexicon=True, log=False,mlm_bert=True)
+    obj_args = EeArgs('obj', use_lexicon=False, log=True,mlm_bert=True)
     predict_tool = Predictor(ner_args, obj_args)
     t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json'
     output_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output %s.json' % (
