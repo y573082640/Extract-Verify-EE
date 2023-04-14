@@ -1,5 +1,11 @@
 #!/bin/bash
 
+pip uninstall transformers -y
+pip install transformers==4.5.0
+python ee_main.py
+
+pip uninstall transformers -y
+pip install transformers
 python run_mlm.py \
     --model_name_or_path model_hub/chinese-bert-wwm-ext/ \
     --train_file /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/mlm/ee_obj_for_mlm.txt \
@@ -18,3 +24,4 @@ python run_mlm.py \
     --logging_steps 100 \
     --save_steps 100 \
     --mlm_probability 0
+    

@@ -37,6 +37,8 @@ class EeArgs:
             self.data_dir, self.data_name)
         self.test_path = "./data/{}/{}/duee_dev.json".format(
             self.data_dir, self.data_name)
+        self.infer_path = "./data/{}/{}/duee_test2.json".format(
+            self.data_dir, self.data_name)
         self.label_path = "./data/{}/{}/labels.txt".format(
             self.data_dir, self.data_name)
         self.demo_path = "./data/{}/{}/duee_train.json".format(
@@ -117,7 +119,7 @@ class EeArgs:
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)
-        for filename in [self.train_path, self.dev_path, self.test_path]:
+        for filename in [self.train_path, self.dev_path, self.test_path, self.infer_path]:
             build_alphabet(filename, self.word_alphabet,
                            self.biword_alphabet, self.pos_alphabet)
             build_gaz_alphabet(filename, self.gaz, self.gaz_alphabet,

@@ -37,7 +37,7 @@ def map_fn(example):
     # 构建问题和回答
     event_type = example['event_type']
     event_type = event_type.split('-')[-1]
-    que_str = '前文的{}事件包含的{}是 sparg {} sparg 吗？'.format(
+    que_str = '前文的{}事件包含的{}是 [ARG] {} [ARG] 吗？'.format(
         event_type, example['role'], example['argument'])
     v_tokens = text_tokens + '[SEP]问题：' + que_str + \
         "答案： unused4 unused5 [MASK] unused6 unused7 。"

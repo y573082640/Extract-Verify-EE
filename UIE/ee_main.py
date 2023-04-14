@@ -664,7 +664,7 @@ if __name__ == '__main__':
     ee_pipeline.train()
     ee_pipeline.test()
 
-    args = EeArgs('obj',log=False)
+    args = EeArgs('obj')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()

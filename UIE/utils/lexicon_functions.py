@@ -85,13 +85,15 @@ def _add_gaz_and_count(text, gaz, gaz_alphabet, gaz_alphabet_count, count):
 def build_gaz_alphabet(input_file, gaz, gaz_alphabet, gaz_alphabet_count, count=False):
     in_lines = open(input_file, 'r', encoding="utf-8").readlines()
     for line in in_lines:
-        d = json.loads(line)
-        text = d['text']
-        questions = _generate_questions(d["event_list"])
-
+        data = json.loads(line)
+        text = data['text']
         _add_gaz_and_count(text, gaz, gaz_alphabet, gaz_alphabet_count, count)
-        for q in questions:
-            _add_gaz_and_count(q, gaz, gaz_alphabet, gaz_alphabet_count, count)
+
+        if 'event_list' in data:
+            questions = _generate_questions(data["event_list"])
+            for q in questions:
+                _add_gaz_and_count(q, gaz, gaz_alphabet,
+                                   gaz_alphabet_count, count)
 
     print("gaz alphabet size:", gaz_alphabet.size())
 
@@ -101,18 +103,21 @@ def build_gaz_alphabet(input_file, gaz, gaz_alphabet, gaz_alphabet_count, count=
 def build_alphabet(input_file, word_alphabet, biword_alphabet, pos_alphabet, NULLKEY="-null-"):
     in_lines = open(input_file, 'r', encoding="utf-8").readlines()
     for line in in_lines:
-        d = json.loads(line)
-        text = d['text']
-        questions = _generate_questions(d["event_list"])
+        data = json.loads(line)
+        text = data['text']
+
         # words_and_flags = pseg.cut(text)  # jieba默认模式
         # for w, f in words_and_flags:
         #     pos_alphabet.add(f)
 
         _add_alphabet(text, word_alphabet, biword_alphabet,
                       pos_alphabet, NULLKEY)
-        for q in questions:
-            _add_alphabet(q, word_alphabet, biword_alphabet,
-                          pos_alphabet, NULLKEY)
+
+        if 'event_list' in data:
+            questions = _generate_questions(data["event_list"])
+            for q in questions:
+                _add_alphabet(q, word_alphabet, biword_alphabet,
+                              pos_alphabet, NULLKEY)
 
         # BERT形式
         # text = ['[CLS]'] + text + ['[SEP]']
@@ -182,13 +187,12 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
                 gazs[idx + w_len - 1][2].append(id)  # End
                 # End
                 gazs_count[idx + w_len -
-                            1][2].append(gaz_alphabet_count[id])
+                           1][2].append(gaz_alphabet_count[id])
 
                 for l in range(1, w_len-1):
                     gazs[idx + l][1].append(id)  # M
                     # M
                     gazs_count[idx + l][1].append(gaz_alphabet_count[id])
-
 
         for label in range(4):  # NULLKEY
             if not gazs[idx][label]:
@@ -202,7 +206,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
         else:
             matched_gaz_Ids.append([])
 
-    ### TODO:这里还需要吗，已经对齐到max_len了
+    # TODO:这里还需要吗，已经对齐到max_len了
     for idx in range(len(text)):
         gazmask = []  # 对某个tokend的mask
 

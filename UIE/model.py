@@ -13,8 +13,10 @@ class UIEModel(nn.Module):
         bert_dir = args.bert_dir
         self.bert_config = BertConfig.from_pretrained(bert_dir)
         self.bert_model = BertModel.from_pretrained(bert_dir)
-        ### 因为添加了新的special_token
-        self.bert_model.resize_token_embeddings(len(args.tokenizer))
+        ### if 添加了新的special_token
+        embedding_size = self.bert_model.get_input_embeddings().weight.shape[0]
+        if len(args.tokenizer) > embedding_size:
+            self.bert_model.resize_token_embeddings(len(args.tokenizer))
         ### 用于词典增强
         if self.args.use_lexicon:
             self.gaz_embedding = nn.Embedding(

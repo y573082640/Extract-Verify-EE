@@ -13,15 +13,15 @@ def chunks(lst, n):
 
 
 def map_fn(example):
-    # 在文本中插入sptgr特殊标志
+    # 在文本中插入[TGR]特殊标志
     text = example['text']
     trigger_start_index = example['trigger_start_index']
     trigger = example['trigger']
     text_tokens = [b for b in text]
     tgr1_index = trigger_start_index
     tgr2_index = trigger_start_index + 1 + len(trigger)
-    text_tokens.insert(tgr1_index, ' sptgr ')
-    text_tokens.insert(tgr2_index, ' sptgr ')
+    text_tokens.insert(tgr1_index, ' [TGR] ')
+    text_tokens.insert(tgr2_index, ' [TGR] ')
     if not text_tokens[-1] == '。':
         text_tokens.append("。")
 
@@ -29,7 +29,7 @@ def map_fn(example):
     # 构建问题和回答
     event_type = example['event_type']
     event_type = event_type.split('-')[-1]
-    que_str = '前文的{}事件包含的{}是 sparg {} sparg 吗？'.format(
+    que_str = '前文的{}事件包含的{}是 [ARG] {} [ARG] 吗？'.format(
         event_type, example['role'], example['argument'])
     v_tokens = text_tokens + '[SEP]问题：' + que_str + \
         "答案： unused4 unused5 [MASK] unused6 unused7 。"
@@ -71,9 +71,15 @@ def verify_result(datas, batch_size=32, model_path='"checkpoints/ee/mlm_label"')
 #         if result[0]['score'] < 0.7:
 #             cnt += 1
 #         result[0]['sequence'] = result[0]['sequence'].replace(" ", "").replace(
-#             "unused4unused5", "").replace("unused6unused7", "").replace("sptgr", "").replace("sparg", "")
+#             "unused4unused5", "").replace("unused6unused7", "").replace("[TGR]", "").replace("[ARG]", "")
 #         json.dump(result[0], f, ensure_ascii=False, separators=(',', ':'))
 #         f.write("\n")
 #     f.write("得分是：")
 #     f.write(str(cnt/total))
 #     f.write("\n")
+# from transformers import BertTokenizer
+
+# bert_dir = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/model_hub/chinese-bert-wwm-ext'
+# sp_tokens = ['[TGR]','[ARG]','[DEMO]']
+# tokenizer = BertTokenizer.from_pretrained(bert_dir,additional_special_tokens=sp_tokens)
+# tokenizer.save_pretrained(bert_dir)
