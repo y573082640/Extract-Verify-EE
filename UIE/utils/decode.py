@@ -1,36 +1,73 @@
 import numpy as np
 from collections import defaultdict
-
+import multiprocessing
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-
 def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
-    ret = []
-    for s_logit, e_logit, text in zip(ner_s_logits, ner_e_logits, raw_tokens):
-        predict_entities = ner_decode(s_logit, e_logit, text, ent_id2label)
-        ret.append(predict_entities)
-    return ret
+    with multiprocessing.Pool() as pool:
+        # 将输入数据打包成一个列表
+        inputs = [(s_logit, e_logit, text, ent_id2label) 
+                  for s_logit, e_logit, text in zip(ner_s_logits, ner_e_logits, raw_tokens)]
+        # 使用进程池进行并行计算
+        results = pool.starmap(ner_decode, inputs)
+    return results
 
+# def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
+#     ret = []
+#     for s_logit, e_logit, text in zip(ner_s_logits, ner_e_logits, raw_tokens):
+#         predict_entities = ner_decode(s_logit, e_logit, text, ent_id2label)
+#         ret.append(predict_entities)
+#     return ret
+
+
+# def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids, roles):
+#     ret = []
+#     for s_logit, e_logit, mask, text, e_id, role in zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles):
+#         length = sum(mask)
+#         pred_entities = bj_decode(s_logit, e_logit, length, id2label)
+#         values = pred_entities["答案"]
+#         for v in values:
+#             start = v[0]
+#             end = v[1]
+#             ans = "".join(text[start:end]).replace("[TGR]", "")
+#             ret.append({
+#                 'role': role,
+#                 'argument': ans,
+#                 'event_id': e_id,
+#             })
+#     return ret
+
+def _multiprocessing_obj_decode(s_logit, e_logit, mask, text, e_id, role, id2label):
+    length = sum(mask)
+    pred_entities = bj_decode(s_logit, e_logit, length, id2label)
+    values = pred_entities["答案"]
+    ret = []
+    for v in values:
+        start = v[0]
+        end = v[1]
+        ans = "".join(text[start:end]).replace("[TGR]", "")
+        ret.append({
+            'role': role,
+            'argument': ans,
+            'event_id': e_id,
+        })
+    return ret
 
 def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids, roles):
     ret = []
-    for s_logit, e_logit, mask, text, e_id, role in zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles):
-        length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label)
-        values = pred_entities["答案"]
-        for v in values:
-            start = v[0]
-            end = v[1]
-            ans = "".join(text[start:end]).replace("[TGR]", "")
-            ret.append({
-                'role': role,
-                'argument': ans,
-                'event_id': e_id,
-            })
+    with multiprocessing.Pool() as pool:
+        # 将输入数据打包成一个列表
+        inputs = [(s_logit, e_logit, mask, text, e_id, role, id2label) 
+                  for s_logit, e_logit, mask, text, e_id, role in 
+                  zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles)]
+        # 使用进程池进行并行计算
+        results = pool.starmap(_multiprocessing_obj_decode, inputs)
+        # 将每个进程计算的结果汇总
+        for result in results:
+            ret.extend(result)
     return ret
-
 
 def ner_decode(start_logits, end_logits, raw_text, id2label):
     """
