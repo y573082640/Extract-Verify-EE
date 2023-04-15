@@ -1,24 +1,27 @@
 import sys
 sys.path.append("..")
-from transformers import AutoModelForMaskedLM, AutoTokenizer, pipeline
-from UIE.ee_data_loader import EeDataset, EeCollate
-from torch.utils.data import DataLoader, RandomSampler
-from time import time
-import logging
-from UIE.config import EeArgs
-from UIE.model import UIEModel
-from UIE.ee_main import EePipeline
-from transformers import BertTokenizer
-import torch
-import json
-import numpy as np
-from time import time
+
+from transformers import BertForMaskedLM, BertTokenizer, pipeline
+import tqdm
 from datetime import datetime
+import numpy as np
+import json
+import torch
+from transformers import BertTokenizer
+from UIE.ee_main import EePipeline
+from UIE.model import UIEModel
+from UIE.config import EeArgs
+import logging
+from time import time
+from torch.utils.data import DataLoader, RandomSampler
+from UIE.ee_data_loader import EeDataset, EeCollate
+
 
 def chunks(lst, n):
     # Yield successive n-sized chunks from lst.
-    for i in range(0, len(lst), n):
+    for i in tqdm.tqdm(range(0, len(lst), n)):
         yield lst[i:i + n]
+
 
 def map_fn(example):
     # 在文本中插入sptgr特殊标志
@@ -28,8 +31,8 @@ def map_fn(example):
     text_tokens = [b for b in text]
     tgr1_index = trigger_start_index
     tgr2_index = trigger_start_index + 1 + len(trigger)
-    text_tokens.insert(tgr1_index, ' sptgr ')
-    text_tokens.insert(tgr2_index, ' sptgr ')
+    text_tokens.insert(tgr1_index, '[TGR]')
+    text_tokens.insert(tgr2_index, '[TGR]')
     if not text_tokens[-1] == '。':
         text_tokens.append("。")
 
@@ -37,11 +40,14 @@ def map_fn(example):
     # 构建问题和回答
     event_type = example['event_type']
     event_type = event_type.split('-')[-1]
-    que_str = '前文的{}事件包含的{}是 [ARG] {} [ARG] 吗？'.format(
+    que_str = '前文的{}事件包含的{}是[ARG]{}[ARG]吗？'.format(
         event_type, example['role'], example['argument'])
-    v_tokens = text_tokens + '[SEP]问题：' + que_str + \
+    most_len = 512 - len('[SEP]问题：' + que_str +
+                         "答案： unused4 unused5 [MASK] unused6 unused7 。")
+    v_tokens = text_tokens[:most_len] + '[SEP]问题：' + que_str + \
         "答案： unused4 unused5 [MASK] unused6 unused7 。"
     return v_tokens
+
 
 class Predictor:
     def __init__(self, ner_args=None, obj_args=None):
@@ -71,7 +77,8 @@ class Predictor:
                         'text': text,
                         'trigger': trg_tuple[0],
                         'trigger_start_index': trg_tuple[1],
-                        'event_id': text_id+"——"+str(i),  # 聚合事件论元 和 聚合事件列表
+                        # 聚合事件论元 和 聚合事件列表
+                        'event_id': text_id + "——" + e_type + str(i),
                         'text_id': text_id
                     }
                     argu_list.append(event)
@@ -88,12 +95,11 @@ class Predictor:
 
         for argu in obj_result:
             e = ret[argu['event_id']]
-            merged_object = {**e,**argu}
+            merged_object = {**e, **argu}
             dataset.append(map_fn(merged_object))
 
         return dataset
 
-    
     def accumulate_answer(self, argu_input, obj_result):
         ret = {}
         # 构建事件
@@ -114,7 +120,6 @@ class Predictor:
             argu_list = ret[text_id]['event_list'][event_id]['arguments']
             argu_list.append(argu)
         # 转换为评测需要的形式
-        logging.info('转换为评测需要的形式...')
         output = []
         for text_id, text_events in ret.items():
             tmp = {}
@@ -133,56 +138,69 @@ class Predictor:
         ret = self.obj_pipeline.predict(data=argu_input)
         return ret
 
-    def verify_result(self, argu_input, obj_result, batch_size=32, model_path="checkpoints/ee/mlm_label"):
-        
+    def verify_result(self, argu_input, obj_result, batch_size=64, model_path="checkpoints/ee/mlm_label"):
+
         datas = self._create_verified_dataset(argu_input, obj_result)
-        # 设置批量大小为32
         # load your model and tokenizer from a local directory or a URL
-        model = AutoModelForMaskedLM.from_pretrained(model_path)
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        model = BertForMaskedLM.from_pretrained(model_path)
+        tokenizer = BertTokenizer.from_pretrained(model_path)
 
         # create an unmasker object with the model and tokenizer
-        unmasker = pipeline("fill-mask", model=model, tokenizer=tokenizer, top_k=1)
+        unmasker = pipeline("fill-mask", model=model, tokenizer=tokenizer,
+                            device=0, top_k=1)
 
         results = []
-        # loop over each line in the file
-        for batch in chunks(datas, batch_size):
-            # call the unmasker on the batch
-            result = unmasker(batch)
+        for batch_data in chunks(datas, batch_size):
+            result = unmasker(batch_data, targets=['不', '是'])
             # append the result to the list
             results.extend(result)
 
         ret = []
         for i, result in enumerate(results):
-            if result[0]['token_str'] != '不':
+            if result[0]['token_str'] == '是':
                 ret.append(obj_result[i])
         return ret
-    
+
     def joint_predict(self, filepath, output):
         st = time()
         ner_result = self.predict_ner(filepath)
         argu_input = self.decode_ner_to_obj(ner_result)
+
+        # 暂时保存中间输出用于分析
+        with open('log/ner_result.json', 'w') as fp:
+            for a in ner_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open('log/argu_input.json', 'w') as fp:
+            for a in argu_input:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        ###
+
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
+        logging.info('...进行验证过滤')
         verified_result = self.verify_result(argu_input, obj_result)
         torch.cuda.empty_cache()
+        logging.info('...转换为评测需要的形式...')
         answer = self.accumulate_answer(argu_input, verified_result)
+        logging.info('...预测结果输入文件:' + str(output))
         with open(output, 'w') as fp:
             for a in answer:
                 json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
                 fp.write('\n')
         ed = time()
-        logging.info('预测结果已输入文件:' + str(output))
         logging.info('推理完成，总计用时%.5f秒' % (ed-st))
         return
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True, log=False,mlm_bert=True)
-    obj_args = EeArgs('obj', use_lexicon=False, log=True,mlm_bert=True)
+    ner_args = EeArgs('ner', use_lexicon=True, log=True, mlm_bert=False)
+    obj_args = EeArgs('obj', use_lexicon=False, log=False, mlm_bert=False)
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2_toy.json'
-    output_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output %s.json' % (
+    t_path = 'data/ee/duee/duee_test2.json'
+    output_path = 'log/output %s.json' % (
         datetime.fromtimestamp(int(time())))
     predict_tool.joint_predict(t_path, output_path)

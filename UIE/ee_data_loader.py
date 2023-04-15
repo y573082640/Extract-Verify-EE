@@ -117,7 +117,7 @@ class EeDatasetPredictor(ListDataset):
                     id = d['id']
 
                     # 简单预处理
-                    text = text.replace('\n', "。").replace(' ', ",")
+                    text = text.replace('\n', "。")
                     if text[-1] != '。':
                         text += '。'
 

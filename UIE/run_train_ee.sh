@@ -24,4 +24,6 @@ python run_mlm.py \
     --logging_steps 100 \
     --save_steps 100 \
     --mlm_probability 0
-    
+
+pip uninstall transformers -y
+pip install transformers==4.5.0

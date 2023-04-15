@@ -1,4 +1,4 @@
-from transformers import AutoModelForMaskedLM, AutoTokenizer, pipeline
+from transformers import AutoModelForMaskedLM, AutoTokenizer,BertTokenizer, pipeline
 from utils.question_maker import get_question_for_argument
 import json
 import tqdm
@@ -83,3 +83,7 @@ def verify_result(datas, batch_size=32, model_path='"checkpoints/ee/mlm_label"')
 # sp_tokens = ['[TGR]','[ARG]','[DEMO]']
 # tokenizer = BertTokenizer.from_pretrained(bert_dir,additional_special_tokens=sp_tokens)
 # tokenizer.save_pretrained(bert_dir)
+
+model_path="checkpoints/ee/mlm_label"
+model = AutoModelForMaskedLM.from_pretrained(model_path)
+tokenizer = BertTokenizer.from_pretrained(model_path)
