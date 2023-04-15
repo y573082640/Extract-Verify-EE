@@ -13,6 +13,20 @@ argument2question_path = 'data/ee/duee/argument2question.json'
 with open(argument2question_path, 'r') as fp:
     argument2question = json.load(fp)
 
+def get_question_for_verify(event_type, role):
+    complete_slot_str = event_type + "-" + role
+    query_str = argument2question.get(complete_slot_str)
+    event_type_str = event_type.split("-")[-1]
+    if query_str.__contains__("？"):
+        query_str = query_str.replace("？","")
+    if query_str == role:
+        query_str_final = "前文包含{}事件中的{}吗？".format(event_type_str, role)
+    elif role == "时间":
+        query_str_final = "前文包含{}{}吗？".format(event_type_str, query_str)
+    else:
+        query_str_final = "前文包含{}事件中的{},包括{}吗？".format(
+            event_type_str, role, query_str)
+    return query_str_final
 
 def get_question_for_argument(event_type, role):
     complete_slot_str = event_type + "-" + role

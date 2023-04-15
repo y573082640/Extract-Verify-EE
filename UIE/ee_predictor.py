@@ -15,7 +15,7 @@ import logging
 from time import time
 from torch.utils.data import DataLoader, RandomSampler
 from UIE.ee_data_loader import EeDataset, EeCollate
-
+from utils.question_maker import get_question_for_verify
 
 def chunks(lst, n):
     # Yield successive n-sized chunks from lst.
@@ -23,7 +23,7 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def map_fn(example):
+def map_fn(example , mode='correct'):
     # 在文本中插入sptgr特殊标志
     text = example['text']
     trigger_start_index = example['trigger_start_index']
@@ -38,16 +38,21 @@ def map_fn(example):
 
     text_tokens = ''.join(text_tokens)
     # 构建问题和回答
-    event_type = example['event_type']
-    event_type = event_type.split('-')[-1]
-    que_str = '前文的{}事件包含的{}是[ARG]{}[ARG]吗？'.format(
-        event_type, example['role'], example['argument'])
-    most_len = 512 - len('[SEP]问题：' + que_str +
-                         "答案： unused4 unused5 [MASK] unused6 unused7 。")
-    v_tokens = text_tokens[:most_len] + '[SEP]问题：' + que_str + \
-        "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    if mode == 'correct':
+        event_type = example['event_type'].split('-')[-1]
+        que_str = '前文的{}事件包含的{}是[ARG]{}[ARG]吗？'.format(
+            event_type, example['role'], example['argument'])
+        que_str = '[SEP]问题：' + que_str + \
+                            "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    elif mode == 'exist':
+        que_str = get_question_for_verify(example['event_type'], example['role'])
+        que_str = '[SEP]问题：' + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    else:
+        raise AttributeError('提供的mode应该为exist 或者 correct')
+    
+    most_len = 512 - 2 - len(que_str) ### [CLS] + [SEP]
+    v_tokens = text_tokens[:most_len] + que_str
     return v_tokens
-
 
 class Predictor:
     def __init__(self, ner_args=None, obj_args=None):
@@ -90,13 +95,13 @@ class Predictor:
         ret = {}
         # 构建事件
         for e in argu_input:
-            if not ret.__contains__(e['text_id']):
+            if not ret.__contains__(e['event_id']):
                 ret[e['event_id']] = e
 
         for argu in obj_result:
             e = ret[argu['event_id']]
             merged_object = {**e, **argu}
-            dataset.append(map_fn(merged_object))
+            dataset.append(map_fn(merged_object,mode='exist'))
 
         return dataset
 
@@ -167,9 +172,17 @@ class Predictor:
         ner_result = self.predict_ner(filepath)
         argu_input = self.decode_ner_to_obj(ner_result)
 
+        torch.cuda.empty_cache()
+        obj_result = self.predict_obj(argu_input)
+        torch.cuda.empty_cache()
+
         # 暂时保存中间输出用于分析
         with open('log/ner_result.json', 'w') as fp:
             for a in ner_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open('log/obj_result.json', 'w') as fp:
+            for a in obj_result:
                 json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
                 fp.write('\n')
         with open('log/argu_input.json', 'w') as fp:
@@ -178,9 +191,6 @@ class Predictor:
                 fp.write('\n')
         ###
 
-        torch.cuda.empty_cache()
-        obj_result = self.predict_obj(argu_input)
-        torch.cuda.empty_cache()
         logging.info('...进行验证过滤')
         verified_result = self.verify_result(argu_input, obj_result)
         torch.cuda.empty_cache()
@@ -197,7 +207,7 @@ class Predictor:
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True, log=True, mlm_bert=False)
+    ner_args = EeArgs('ner', use_lexicon=True, log=False, mlm_bert=False)
     obj_args = EeArgs('obj', use_lexicon=False, log=False, mlm_bert=False)
     predict_tool = Predictor(ner_args, obj_args)
     t_path = 'data/ee/duee/duee_test2.json'
