@@ -262,24 +262,24 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
-            if return_report:
-                if str(pred_entities) != str(true_entities):
-                    logging.debug("========================")
-                    logging.debug(''.join(text))
-                    logging.debug('真实')
-                    for key in true_entities.keys():
-                        if len(true_entities[key]) > 0:
-                            for s_t_tuple in true_entities[key]:
-                                logging.debug(
-                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
+            # if return_report:
+            #     if str(pred_entities) != str(true_entities):
+            #         logging.debug("========================")
+            #         logging.debug(''.join(text))
+            #         logging.debug('真实')
+            #         for key in true_entities.keys():
+            #             if len(true_entities[key]) > 0:
+            #                 for s_t_tuple in true_entities[key]:
+            #                     logging.debug(
+            #                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
-                    logging.debug('预测')
-                    for key in pred_entities.keys():
-                        if len(pred_entities[key]) > 0:
-                            for s_t_tuple in pred_entities[key]:
-                                logging.debug(
-                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
-                    logging.debug("========================")
+            #         logging.debug('预测')
+            #         for key in pred_entities.keys():
+            #             if len(pred_entities[key]) > 0:
+            #                 for s_t_tuple in pred_entities[key]:
+            #                     logging.debug(
+            #                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
+            #         logging.debug("========================")
 
             for idx, _type in enumerate(list(id2label.values())):
                 if _type not in pred_entities:
@@ -358,23 +358,23 @@ class EePipeline:
             # print(pred_entities)
             # print(true_entities)
             # print("========================")
-            if return_report:
-                if str(pred_entities) != str(true_entities):
-                    logging.debug("<========================>")
-                    logging.debug(''.join(text))
-                    logging.debug('=============>')
-                    for key in true_entities.keys():
-                        if len(true_entities[key]) > 0:
-                            for s_t_tuple in true_entities[key]:
-                                logging.debug(
-                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
+            # if return_report:
+            #     if str(pred_entities) != str(true_entities):
+            #         logging.debug("<========================>")
+            #         logging.debug(''.join(text))
+            #         logging.debug('=============>')
+            #         for key in true_entities.keys():
+            #             if len(true_entities[key]) > 0:
+            #                 for s_t_tuple in true_entities[key]:
+            #                     logging.debug(
+            #                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
-                    logging.debug('<=============')
-                    for key in pred_entities.keys():
-                        if len(pred_entities[key]) > 0:
-                            for s_t_tuple in pred_entities[key]:
-                                logging.debug(
-                                    key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
+            #         logging.debug('<=============')
+            #         for key in pred_entities.keys():
+            #             if len(pred_entities[key]) > 0:
+            #                 for s_t_tuple in pred_entities[key]:
+            #                     logging.debug(
+            #                         key + ":" + str(text[s_t_tuple[0]:s_t_tuple[1]]))
 
             # 对第i条数据，计算每个事件类型的预测结果
             for idx, _type in enumerate(self.args.entity_label):
@@ -658,17 +658,17 @@ class EePipeline:
                 return ret
 
 if __name__ == '__main__':
-    args = EeArgs('ner',use_lexicon=True)
+    args = EeArgs('ner',use_lexicon=False,output_name='no_lexicon')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
-    ee_pipeline.test()
 
-    args = EeArgs('obj',log=False,use_lexicon=False)
+    args = EeArgs('ner',log=False,gaz_dim=100,use_lexicon=True,output_name='100_lexicon')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
-    ee_pipeline.test()
 
-
-
+    args = EeArgs('ner',log=False,gaz_dim=200,use_lexicon=True,output_name='200_lexicon')
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()

@@ -16,6 +16,7 @@ from time import time
 from torch.utils.data import DataLoader, RandomSampler
 from UIE.ee_data_loader import EeDataset, EeCollate
 from utils.question_maker import get_question_for_verify
+from UIE.ee_postprocessing import remove_duplicates
 
 def chunks(lst, n):
     # Yield successive n-sized chunks from lst.
@@ -196,6 +197,8 @@ class Predictor:
         torch.cuda.empty_cache()
         logging.info('...转换为评测需要的形式...')
         answer = self.accumulate_answer(argu_input, verified_result)
+        logging.info('...后处理...')
+        answer = remove_duplicates(answer)
         logging.info('...预测结果输入文件:' + str(output))
         with open(output, 'w') as fp:
             for a in answer:
@@ -207,10 +210,12 @@ class Predictor:
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True, log=False, mlm_bert=False)
+    ner_args = EeArgs('ner', use_lexicon=True, log=True, mlm_bert=False)
     obj_args = EeArgs('obj', use_lexicon=False, log=False, mlm_bert=False)
     predict_tool = Predictor(ner_args, obj_args)
     t_path = 'data/ee/duee/duee_test2.json'
     output_path = 'log/output %s.json' % (
         datetime.fromtimestamp(int(time())))
     predict_tool.joint_predict(t_path, output_path)
+    
+
