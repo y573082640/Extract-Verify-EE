@@ -139,14 +139,6 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
     biwords = []  # 双词
     word_Ids = []  # 单词转为id（词表中）
     biword_Ids = []  # 双词转为id（词表中）
-    # TODO:pos
-    # words_and_flags = pseg.cut(text)  # jieba默认模式
-    # for w, f in words_and_flags:
-    #     f_index = pos_alphabet.get_index(f)
-    #     word_pos += len(w) * [f_index]
-    # text = list(text)
-    # 引入词、双词信息
-    # batch_size = 1
     for idx in range(len(text)):
         w = text[idx]
         words.append(w)
@@ -179,7 +171,7 @@ def generate_instance_with_gaz(text, pos_alphabet, word_alphabet,
 
             if w_len == 1:  # Single
                 gazs[idx][3].append(id)
-                gazs_count[idx][3].append(1)
+                gazs_count[idx][3].append(gaz_alphabet_count[id])
             else:
                 gazs[idx][0].append(id)  # Begin
                 gazs_count[idx][0].append(gaz_alphabet_count[id])

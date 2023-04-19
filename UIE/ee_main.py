@@ -425,7 +425,7 @@ class EePipeline:
         eval_step = self.args.eval_step
         best_f1 = 0.
         for epoch in range(1, self.args.train_epoch + 1):
-            for step, batch_data in enumerate(train_loader):
+            for batch_data in tqdm.tqdm((train_loader)):
                 self.model.train()
                 for key in batch_data.keys():
                     if key not in self.args.ignore_key:
@@ -662,13 +662,22 @@ if __name__ == '__main__':
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
+    ee_pipeline.test()
 
-    args = EeArgs('ner',log=False,gaz_dim=100,use_lexicon=True,output_name='100_lexicon')
+    args = EeArgs('ner',log=True,gaz_dim=50,use_lexicon=True,output_name='50_lexicon')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
+    ee_pipeline.test()
 
-    args = EeArgs('ner',log=False,gaz_dim=200,use_lexicon=True,output_name='200_lexicon')
+    args = EeArgs('ner',log=True,gaz_dim=100,use_lexicon=True,output_name='100_lexicon')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
+    ee_pipeline.test()
+
+    args = EeArgs('ner',log=True,gaz_dim=200,use_lexicon=True,output_name='200_lexicon')
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 python run_mlm.py \
-    --model_name_or_path model_hub/chinese-bert-wwm-ext/ \
+    --model_name_or_path model_hub/chinese-roberta-wwm-ext/ \
     --train_file /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/mlm/ee_obj_for_mlm.txt \
     --validation_file /home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/mlm/ee_obj_for_mlm_test.txt \
     --per_device_train_batch_size 32 \

@@ -15,25 +15,33 @@ gaz_dict = {
     200: "./data/embs/tencent-d200/tencent-ailab-embedding-zh-d200-v0.2.0-s.txt"
 }
 
+model_dict = {
+    'bert': 'model_hub/chinese-bert-wwm-ext/',
+    'roberta': 'model_hub/chinese-roberta-wwm-ext/',
+    'macbert': 'model_hub/chinese-macbert-base/',
+    'mlmbert': 'checkpoints/ee/mlm_label'
+}
+
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, mlm_bert=False,output_name=None):
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None):
         self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
-        
-        if mlm_bert:
-            self.bert_dir = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_label'  
+
+        if model in model_dict:
+            self.bert_dir = model_dict[model]
         else:
-            self.bert_dir = "model_hub/chinese-bert-wwm-ext/"
-            
+            self.bert_dir = model_dict['bert']
+            print('[WARNING] 模型{}不存在,自动加载chinese-bert-wwm-ext'.format(model))
+
         if output_name is None:
-            self.save_dir = "./checkpoints/{}/{}_{}_model_retrival_wo_analogy.pt".format(
-                self.data_dir, self.tasks[0], self.data_name)
+            self.save_dir = "./checkpoints/{}/{}_{}_{}_test.pt".format(
+                self.data_dir, self.tasks[0], self.data_name, model)
         else:
-            self.save_dir = "./checkpoints/{}/{}_{}_{}.pt".format(
-                self.data_dir, self.tasks[0], self.data_name,output_name)
-            
+            self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
+                self.data_dir, self.tasks[0], self.data_name, model, output_name)
+
         self.train_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
         self.dev_path = "./data/{}/{}/duee_dev.json".format(
@@ -46,8 +54,9 @@ class EeArgs:
             self.data_dir, self.data_name)
         self.demo_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
-        self.sim_model='model_hub/paraphrase-MiniLM-L6-v2'
-        self.ignore_key = ['argu_roles','raw_tokens', 'batch_augment_Ids','text_ids']
+        self.sim_model = 'model_hub/paraphrase-MiniLM-L6-v2'
+        self.ignore_key = ['argu_roles', 'raw_tokens',
+                           'batch_augment_Ids', 'text_ids']
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
         self.ent_label2id = {}
@@ -57,11 +66,11 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 20
-        self.train_batch_size = 32
-        self.eval_batch_size = 32
+        self.train_epoch = 30
+        self.train_batch_size = 24
+        self.eval_batch_size = 24
         self.eval_step = 500
-        self.max_seq_len = 256+128
+        self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
@@ -72,6 +81,8 @@ class EeArgs:
             "cuda" if torch.cuda.is_available() else "cpu")
         # device = torch.device("cpu")
         self.tokenizer = BertTokenizer.from_pretrained(self.bert_dir)
+        self.tokenizer.add_special_tokens(
+            {'additional_special_tokens': ["[TGR]", "[DEMO]", "[ARG]"]})
         # 下面是lexicon的
         # 完成alphabet构建
         self.use_lexicon = use_lexicon
@@ -84,12 +95,12 @@ class EeArgs:
         self.gaz_dropout = 0.5
         self.norm_word_emb = True
         self.norm_biword_emb = True
-        self.norm_gaz_emb = False
+        self.norm_gaz_emb = True
         self.char_emb = "./data/embs/gigaword_chn.all.a2b.uni.ite50.vec"
         self.bichar_emb = "./data/embs/gigaword_chn.all.a2b.bi.ite50.vec"
         gaz_dim = gaz_dim if gaz_dim in [50, 100, 200] else 50
-        self.gaz_file = gaz_dict.get(gaz_dim,50)
-        
+        self.gaz_file = gaz_dict.get(gaz_dim, 50)
+
         if log:
             self.logs_save_dir = 'log'
             logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
@@ -110,14 +121,16 @@ class EeArgs:
             self.init_lexicon()
 
         if 'obj' in self.tasks:
-            label2role_path = "./data/ee/{}/label2role.json".format(self.data_name)
+            label2role_path = "./data/ee/{}/label2role.json".format(
+                self.data_name)
             with open(label2role_path, "r", encoding="utf-8") as fp:
                 self.label2role = json.load(fp)
             # 相似度增强
             logging.info('...加载相似度匹配模型:'+self.sim_model)
             self.sim_scorer = Sim_scorer(self.sim_model)
             logging.info('...构造提示库embedding')
-            self.demo_embs, self.demo_tuples=self.sim_scorer.create_embs_and_tuples(self.demo_path)
+            self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
+                self.demo_path)
             logging.info('...提示库embedding构造完毕')
 
     def init_lexicon(self):
@@ -138,10 +151,10 @@ class EeArgs:
         self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
             self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
         self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
-            self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)   
+            self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)
         self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
-            self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)   
-                  
+            self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)
+
         # if os.path.exists('./storage/word_embedding.npy'):
         #     self.pretrain_word_embedding = np.load(
         #         'storage/word_embedding.npy')
