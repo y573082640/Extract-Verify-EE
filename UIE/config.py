@@ -24,7 +24,7 @@ model_dict = {
 
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None):
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,use_demo=True):
         self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
@@ -48,7 +48,7 @@ class EeArgs:
             self.data_dir, self.data_name)
         self.test_path = "./data/{}/{}/duee_dev.json".format(
             self.data_dir, self.data_name)
-        self.infer_path = "./data/{}/{}/duee_test2.json".format(
+        self.infer_path = "./data/{}/{}/duee_dev.json".format(
             self.data_dir, self.data_name)
         self.label_path = "./data/{}/{}/labels.txt".format(
             self.data_dir, self.data_name)
@@ -66,11 +66,11 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 30
-        self.train_batch_size = 24
-        self.eval_batch_size = 24
+        self.train_epoch = 40
+        self.train_batch_size = 32
+        self.eval_batch_size = 32
         self.eval_step = 500
-        self.max_seq_len = 512
+        self.max_seq_len = 256
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
@@ -126,12 +126,19 @@ class EeArgs:
             with open(label2role_path, "r", encoding="utf-8") as fp:
                 self.label2role = json.load(fp)
             # 相似度增强
-            logging.info('...加载相似度匹配模型:'+self.sim_model)
-            self.sim_scorer = Sim_scorer(self.sim_model)
-            logging.info('...构造提示库embedding')
-            self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
-                self.demo_path)
-            logging.info('...提示库embedding构造完毕')
+            self.use_demo = use_demo
+            if use_demo:
+                logging.info('...加载相似度匹配模型:'+self.sim_model)
+                self.sim_scorer = Sim_scorer(self.sim_model)
+                logging.info('...构造提示库embedding')
+                self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
+                    self.demo_path)
+                logging.info('...提示库embedding构造完毕')
+            else:
+                logging.info('...不使用相似样例辅助学习')
+                self.sim_scorer = None
+                self.demo_embs = None
+                self.demo_tuples = None
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)

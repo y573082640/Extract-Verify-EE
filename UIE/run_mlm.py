@@ -462,7 +462,11 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-
+    
+    ### from ydh
+    tokenizer.add_special_tokens({'additional_special_tokens': ["[TGR]", "[DEMO]", "[ARG]","unused4", "unused5", "unused6", "unused7"]})
+    ### from ydh
+    
     if model_args.model_name_or_path:
         model = AutoModelForMaskedLM.from_pretrained(
             model_args.model_name_or_path,

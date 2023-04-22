@@ -658,26 +658,31 @@ class EePipeline:
                 return ret
 
 if __name__ == '__main__':
-    args = EeArgs('ner',use_lexicon=False,output_name='no_lexicon')
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
 
-    args = EeArgs('ner',log=True,gaz_dim=50,use_lexicon=True,output_name='50_lexicon')
+    args = EeArgs('obj',log=True,model='roberta',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
     ee_pipeline.test()
+    torch.cuda.empty_cache()
 
-    args = EeArgs('ner',log=True,gaz_dim=100,use_lexicon=True,output_name='100_lexicon')
+    args = EeArgs('obj',log=True,model='macbert',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
     ee_pipeline.test()
+    torch.cuda.empty_cache()
 
-    args = EeArgs('ner',log=True,gaz_dim=200,use_lexicon=True,output_name='200_lexicon')
+    args = EeArgs('obj',log=True,model='bert',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()
     ee_pipeline.test()
+    torch.cuda.empty_cache()
+
+    args = EeArgs('ner',log=True,model='roberta',use_lexicon=False,output_name='no_lexicon_len256_bs32')
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()
+    torch.cuda.empty_cache()
