@@ -13,7 +13,7 @@ from utils.question_maker import Sim_scorer, creat_demo, creat_argu_token, creat
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, generate_instance_with_gaz, batchify_augment_ids
-
+from utils.question_maker import get_question_for_argument
 NULLKEY = "-null-"
 
 
@@ -335,60 +335,128 @@ class EeDataset(ListDataset):
                     ner_data.append(event_data)
 
         elif "obj" in tasks:
-            logging.info('...构造文本embedding')
-            sim_scorer = self.args.sim_scorer
-            embs, tuples = sim_scorer.create_embs_and_tuples(filename)
-            logging.info('文本embedding构造完毕')
-            # 此处用训练集作为demo库
-            demo_embs = self.args.demo_embs
-            demo_tuples = self.args.demo_tuples
-            most_sim = sim_scorer.sim_match(
-                embs, demo_embs, rank=1 if filename == self.args.demo_path else 0)  # {corpus_id,score}
-            logging.info('相似度匹配完成')
-            # logging.info(1 if filename == self.args.demo_path else 0)
-            for idx, text_tuple in enumerate(tuples):
-                sim_id = most_sim[idx]['corpus_id']
-                sim_score = most_sim[idx]['score']
+            if self.args.use_demo: ### 如果检索相似样例，则需要为文本构建检索向量
+                logging.info('...构造文本embedding')
+                sim_scorer = self.args.sim_scorer
+                embs, tuples = sim_scorer.create_embs_and_tuples(filename)
+                logging.info('文本embedding构造完毕')
+                # 此处用训练集作为demo库
+                demo_embs = self.args.demo_embs
+                demo_tuples = self.args.demo_tuples
+                most_sim = sim_scorer.sim_match(
+                    embs, demo_embs, rank=1 if filename == self.args.demo_path else 0)  # {corpus_id,score}
+                logging.info('相似度匹配完成')
+                # logging.info(1 if filename == self.args.demo_path else 0)
+                for idx, text_tuple in enumerate(tuples):
+                    sim_id = most_sim[idx]['corpus_id']
+                    sim_score = most_sim[idx]['score']
 
-                demo = creat_demo(demo_tuples[sim_id])
-                argu_token, obj_token_type_ids = creat_argu_token(
-                    text_tuple, demo, max_len)
-                argu_start_labels, argu_end_labels = creat_argu_labels(
-                    argu_token, demo, text_tuple, max_len)
+                    demo = creat_demo(demo_tuples[sim_id])
+                    argu_token, obj_token_type_ids = creat_argu_token(
+                        text_tuple, demo, max_len)
+                    argu_start_labels, argu_end_labels = creat_argu_labels(
+                        argu_token, demo, text_tuple, max_len)
 
-                # logging.info('============')
-                # logging.info(sim_score)
-                # logging.info("".join(
-                #     demo_tuples[sim_id]['question'] + "--" + demo_tuples[sim_id]['trigger']))
-                # logging.info(
-                #     "".join(text_tuple['question'] + "--" + text_tuple['trigger']))
+                    # logging.info('============')
+                    # logging.info(sim_score)
+                    # logging.info("".join(
+                    #     demo_tuples[sim_id]['question'] + "--" + demo_tuples[sim_id]['trigger']))
+                    # logging.info(
+                    #     "".join(text_tuple['question'] + "--" + text_tuple['trigger']))
 
-                if len(argu_start_labels) == 0:
-                    continue
+                    if len(argu_start_labels) == 0:
+                        continue
 
-                if self.args.use_lexicon:
-                    augment_Ids = generate_instance_with_gaz(
-                        argu_token,
-                        self.args.pos_alphabet,
-                        self.args.word_alphabet,
-                        self.args.biword_alphabet,
-                        self.args.gaz_alphabet,
-                        self.args.gaz_alphabet_count,
-                        self.args.gaz,
-                        max_len)
-                else:
-                    augment_Ids = []
+                    if self.args.use_lexicon:
+                        augment_Ids = generate_instance_with_gaz(
+                            argu_token,
+                            self.args.pos_alphabet,
+                            self.args.word_alphabet,
+                            self.args.biword_alphabet,
+                            self.args.gaz_alphabet,
+                            self.args.gaz_alphabet_count,
+                            self.args.gaz,
+                            max_len)
+                    else:
+                        augment_Ids = []
 
-                argu_data = {
-                    "obj_tokens": argu_token,
-                    "obj_start_labels": argu_start_labels,
-                    "obj_end_labels": argu_end_labels,
-                    'obj_token_type_ids': obj_token_type_ids,
-                    "augment_Ids": augment_Ids,
-                    'sim_score': 1 if sim_score > 0.75 else 0
-                }
+                    argu_data = {
+                        "obj_tokens": argu_token,
+                        "obj_start_labels": argu_start_labels,
+                        "obj_end_labels": argu_end_labels,
+                        'obj_token_type_ids': obj_token_type_ids,
+                        "augment_Ids": augment_Ids,
+                        'sim_score': 1 if sim_score > 0.75 else 0
+                    }
 
-                obj_data.append(argu_data)
+                    obj_data.append(argu_data)
+            else:
+                with open(filename, encoding='utf-8') as f:
+                    f = f.read().strip().split("\n")
+                    for evt_idx, d in enumerate(f):
+                        d = json.loads(d)
+                        text = d["text"]
+
+                        event_list = d["event_list"]
+                        if len(text) == 0:
+                            continue
+
+                        for tgr_idx, event in enumerate(event_list):
+                            event_type = event["event_type"]
+                            arguments = event["arguments"]
+                            trigger = event["trigger"]
+
+                            for aru_idx, argument in enumerate(arguments):
+                                role = argument["role"]
+                                question = get_question_for_argument(event_type=event_type, role=role)
+                                text_tuple = {
+                                    'text': text,
+                                    'trigger': trigger,
+                                    'question': question,
+                                    'trigger_start_index': event["trigger_start_index"],
+                                    'argument': argument["argument"],
+                                    'argument_start_index': argument["argument_start_index"],
+                                    'role': argument["role"],
+                                    'event_type': event["event_type"]
+                                }
+
+                                argu_token, obj_token_type_ids = creat_argu_token(
+                                    text_tuple=text_tuple, 
+                                    demo=None, 
+                                    max_len=max_len)
+                                
+                                argu_start_labels, argu_end_labels = creat_argu_labels(
+                                    argu_token=argu_token, 
+                                    demo=None, 
+                                    text_tuple=text_tuple, 
+                                    max_len=max_len)
+
+                                if len(argu_start_labels) == 0:
+                                    continue
+
+                                if self.args.use_lexicon:
+                                    augment_Ids = generate_instance_with_gaz(
+                                        argu_token,
+                                        self.args.pos_alphabet,
+                                        self.args.word_alphabet,
+                                        self.args.biword_alphabet,
+                                        self.args.gaz_alphabet,
+                                        self.args.gaz_alphabet_count,
+                                        self.args.gaz,
+                                        max_len)
+                                else:
+                                    augment_Ids = []
+
+                                argu_data = {
+                                    "obj_tokens": argu_token,
+                                    "obj_start_labels": argu_start_labels,
+                                    "obj_end_labels": argu_end_labels,
+                                    'obj_token_type_ids': obj_token_type_ids,
+                                    "augment_Ids": augment_Ids,
+                                    'sim_score': 0
+                                }
+
+                                obj_data.append(argu_data)
 
         logging.info("数据集构建完毕")
         return ner_data if "ner" in tasks else obj_data

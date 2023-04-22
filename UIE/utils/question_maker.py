@@ -79,7 +79,12 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
         argument_start_index += 1
 
     question = text_tuple['question']
-    pre_tokens = demo + [i for i in question] + ['[SEP]']
+
+    if demo is not None:
+        pre_tokens = demo + [i for i in question] + ['[SEP]']
+    else:
+        pre_tokens = [i for i in question] + ['[SEP]']
+
     argu_start = len(pre_tokens) + 1 + argument_start_index
     argu_end = argu_start + len(argu) - 1
 
@@ -103,7 +108,12 @@ def creat_argu_token(text_tuple, demo, max_len):
     tgr2_index = trigger_start_index + 1 + len(trigger)
     text_tokens.insert(tgr1_index, '[TGR]')
     text_tokens.insert(tgr2_index, '[TGR]')
-    pre_tokens = demo + [i for i in question] + ['[SEP]']
+
+    if demo is not None:
+        pre_tokens = demo + [i for i in question] + ['[SEP]']
+    else:
+        pre_tokens = [i for i in question] + ['[SEP]']
+
     if len(text_tokens) + len(pre_tokens) > max_len - 2:
         argu_token = (pre_tokens + text_tokens)[:max_len-2]
     else:
