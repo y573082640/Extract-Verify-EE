@@ -6,8 +6,25 @@ from collections import defaultdict
 
 import numpy as np
 
+def longest_common_substring(str1, str2):
+    m = len(str1)
+    n = len(str2)
+    dp = [[0] * n for _ in range(m)]
+    max_len = 0
+    for i in range(m):
+        for j in range(n):
+            if str1[i] == str2[j]:
+                if i == 0 or j == 0:
+                    dp[i][j] = 1
+                else:
+                    dp[i][j] = dp[i-1][j-1] + 1
+                max_len = max(max_len, dp[i][j])
+            else:
+                dp[i][j] = 0
+    # print(str1, str2, max_len)
+    return max_len
 
-def _lcs(A, B):
+def lcs(A, B):
     n = len(A)
     m = len(B)
     L = np.zeros((n+1, m+1), dtype=np.int64)
@@ -21,12 +38,7 @@ def _lcs(A, B):
 
 
 def calculate_metric(predict, gt, text=None):
-    """
-    计算 tp fp fn
-    字级别匹配F1值 = 2 * 字级别匹配P值 * 字级别匹配R值 / (字级别匹配P值 + 字级别匹配R值)
-    字级别匹配P值 = 预测论元和人工标注论元共有字的数量/ 预测论元字数
-    字级别匹配R值 = 预测论元和人工标注论元共有字的数量/ 人工标注论元字数
-    """
+
     tp, fp, fn = 0, 0, 0
     for entity_predict in predict:
         flag = 0
@@ -44,43 +56,53 @@ def calculate_metric(predict, gt, text=None):
     fn = len(gt) - tp
     return np.array([tp, fp, fn])
 
-
 def word_level_calculate_metric(predict, gt, text):
+    """
+    计算 tp fp fn
+    字级别匹配F1值 = 2 * 字级别匹配P值 * 字级别匹配R值 / (字级别匹配P值 + 字级别匹配R值)
+    字级别匹配P值 = 预测论元和人工标注论元共有字的数量/ 预测论元字数
+    字级别匹配R值 = 预测论元和人工标注论元共有字的数量/ 人工标注论元字数
+    """
     predict_texts = []
-    gt_texts = []
+    groudtruth_texts = []
     for entity_predict in predict:
         predict_texts.append(
             "".join(text[entity_predict[0]:entity_predict[1]]))
     for entity_gt in gt:
-        gt_texts.append("".join(text[entity_gt[0]:entity_gt[1]]))
-    predict_texts = set(predict_texts)
-    gt_texts = set(gt_texts)
+        groudtruth_texts.append("".join(text[entity_gt[0]:entity_gt[1]]))
 
-    for gt in gt_texts: ### 实际上此时只有一个论元角色
-        count_pre, count_gt, count_share = 0, 0, 0
-        count_gt = len(gt)
-        f_max = 0
-        rt1, rt2, rt3 = 0, count_gt, 0
+    count_predict, count_groundtruth, count_share_in_predict_texts,count_share_in_groudtruth_texts = 0, 0, 0 , 0
 
-        for pre_t in predict_texts:
-            count_pre = len(pre_t)
-            count_share = max(count_share, _lcs(pre_t, gt))
-            p = count_share/count_pre if count_pre != 0 else 0
-            r = count_share/count_gt if count_gt != 0 else 0
-            f = 2*p*r/(p+r) if p + r != 0 else 0
-            if f > f_max:
-                f_max = f
-                rt1 = count_pre
-                rt2 = count_gt
-                rt3 = count_share
+    for gt in groudtruth_texts: #人工标注论元字数
+        count_groundtruth += len(gt)
+    for pre_t in predict_texts: # 预测论元字数
+        count_predict += len(pre_t)
 
-    return np.array([rt1, rt2, rt3])
+    ## 计算最大匹配
+    for i,pre_t in enumerate(predict_texts): ### 实际上此时只有一个论元角色
+        count_max = 0
+        for j,gt in enumerate(groudtruth_texts):
+            count_tmp =  longest_common_substring(pre_t, gt) # 共有字数
+            if count_tmp > count_max:
+                count_max = count_tmp
+        count_share_in_predict_texts += count_max
+
+    for i,gt in enumerate(groudtruth_texts): ### 实际上此时只有一个论元角色
+        count_max = 0
+        for j,pre_t in enumerate(predict_texts):
+            count_tmp =  longest_common_substring(pre_t, gt) # 共有字数
+            if count_tmp > count_max:
+                count_max = count_tmp
+        count_share_in_groudtruth_texts += count_max
+    ## 根据最大匹配
+
+    return np.array([count_predict, count_groundtruth, count_share_in_predict_texts , count_share_in_groudtruth_texts])
 
 
-def get_argu_p_r_f(count_pre, count_gt, count_share):
-    p = count_share/count_pre
-    r = count_share/count_gt
-    f1 = 2.0*p*r/(p+r)
+def get_argu_p_r_f(count_predict, count_groundtruth, count_share_in_predict_texts , count_share_in_groudtruth_texts):
+    p = count_share_in_predict_texts/count_predict if count_predict != 0 else 0
+    r = count_share_in_groudtruth_texts/count_groundtruth if count_groundtruth != 0 else 0
+    f1 = 2.0*p*r/(p+r) if p + r != 0 else 0
     return np.array([p, r, f1])
 
 

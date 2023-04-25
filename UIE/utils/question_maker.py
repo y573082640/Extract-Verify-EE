@@ -54,9 +54,15 @@ def creat_demo(sim_tuple):
     sim_text_tokens.insert(sim_trigger_start_index, '[TGR]')
     sim_text_tokens.insert(
         sim_trigger_start_index + 1 + len(sim_trigger), '[TGR]')
+    
+    answers = []
+    for argu in sim_tuple['arguments'][:3]:
+        answers.append("[ARG]") 
+        answers.append(argu['argument'])
+
     demo = ['[DEMO]'] + [i for i in sim_tuple['question']] + ['[SEP]'] + \
-        sim_text_tokens + ['[SEP]', '答案是：[ARG]'] + \
-        [i for i in sim_tuple['argument']] + ['[DEMO]']
+        sim_text_tokens + ['[SEP]', '答案是：'] + answers + ['[DEMO]']
+    
     return demo
 
 
@@ -67,32 +73,28 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
     # 因为text中多加了[TGR] 
     trigger = text_tuple["trigger"]
     trigger_start_index = text_tuple['trigger_start_index']
-    # 用于增加对arg的偏置
-    tgr1_index = trigger_start_index
-    tgr2_index = trigger_start_index + 1 + len(trigger)
-    argu = text_tuple["argument"]
-    argument_start_index = text_tuple['argument_start_index']
-
-    if tgr1_index <= argument_start_index:
-        argument_start_index += 1
-    if tgr2_index <= argument_start_index:
-        argument_start_index += 1
-
+    ## 用于计算应该给argument_start_index加多少偏置
     question = text_tuple['question']
-
     if demo is not None:
         pre_tokens = demo + [i for i in question] + ['[SEP]']
     else:
         pre_tokens = [i for i in question] + ['[SEP]']
+    # 用于增加对arg的偏置
+    tgr1_index = trigger_start_index
+    tgr2_index = trigger_start_index + 1 + len(trigger)
 
-    argu_start = len(pre_tokens) + 1 + argument_start_index
-    argu_end = argu_start + len(argu) - 1
-
-    if argu_end >= max_len - 1:
-        return [], []
-
-    argu_start_labels[argu_start] = 1
-    argu_end_labels[argu_end] = 1
+    ## 用于计算所有事件论的起止位置
+    for argu in text_tuple["arguments"]:
+        argument_start_index = argu['argument_start_index']
+        if tgr1_index <= argument_start_index:
+            argument_start_index += 1
+        if tgr2_index <= argument_start_index:
+            argument_start_index += 1
+        argu_start = len(pre_tokens) + 1 + argument_start_index
+        argu_end = argu_start + len(argu) - 1
+        if argu_end < max_len :
+            argu_start_labels[argu_start] = 1
+            argu_end_labels[argu_end] = 1
 
     return argu_start_labels, argu_end_labels
 
@@ -185,11 +187,16 @@ class Sim_scorer:
 
                     for tgr_idx, event in enumerate(event_list):
                         event_type = event["event_type"]
-                        arguments = event["arguments"]
                         trigger = event["trigger"]
-
-                        for aru_idx, argument in enumerate(arguments):
+                        role_dict = {}
+                        for aru_idx, argument in enumerate(event["arguments"]):
                             role = argument["role"]
+                            if role not in role_dict:
+                                role_dict[role] = []
+                            else:
+                                role_dict[role].append(argument)
+
+                        for role, arguments in role_dict.items():
                             question = get_question_for_argument(
                                 event_type=event_type, role=role)
                             # 文本越短越好匹配，考虑四个要素：类型、角色、触发词和文本长度。
@@ -200,8 +207,7 @@ class Sim_scorer:
                                 'trigger': trigger,
                                 'question': question,
                                 'trigger_start_index': event["trigger_start_index"],
-                                'argument': argument["argument"],
-                                'argument_start_index': argument["argument_start_index"],
+                                'arguments': arguments,
                                 'role': argument["role"],
                                 'event_type': event["event_type"]
                             })
@@ -233,8 +239,7 @@ class Sim_scorer:
                         'trigger': trigger,
                         'question': q,
                         'trigger_start_index': trigger_start_index,
-                        'argument': None,
-                        'argument_start_index': None,
+                        'arguments': None,
                         'role': role,
                         'event_type': event_type,
                         'event_id': event_id

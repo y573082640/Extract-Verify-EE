@@ -23,7 +23,9 @@ def chunks(lst, n):
     for i in tqdm.tqdm(range(0, len(lst), n)):
         yield lst[i:i + n]
 
-
+def name_with_date(name):
+    return 'log/%s %s.json' % (name,datetime.fromtimestamp(int(time())))
+    
 def map_fn(example , mode='correct'):
     # 在文本中插入sptgr特殊标志
     text = example['text']
@@ -177,26 +179,27 @@ class Predictor:
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
 
-        # 暂时保存中间输出用于分析
-        with open('log/ner_result.json', 'w') as fp:
-            for a in ner_result:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
-        with open('log/obj_result.json', 'w') as fp:
-            for a in obj_result:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
-        with open('log/argu_input.json', 'w') as fp:
-            for a in argu_input:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
-        ###
-
         logging.info('...进行验证过滤')
         verified_result = self.verify_result(argu_input, obj_result)
         torch.cuda.empty_cache()
         logging.info('...转换为评测需要的形式...')
         answer = self.accumulate_answer(argu_input, verified_result)
+
+        ### 暂时保存中间输出用于分析
+        with open(name_with_date('ner_result'), 'w') as fp:
+            for a in ner_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open(name_with_date('obj_result'), 'w') as fp:
+            for a in obj_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open(name_with_date('verified_result'), 'w') as fp:
+            for a in answer:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        ##
+
         logging.info('...后处理...')
         answer = remove_duplicates(answer)
         logging.info('...预测结果输入文件:' + str(output))
@@ -210,12 +213,11 @@ class Predictor:
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=True, log=True, mlm_bert=False)
-    obj_args = EeArgs('obj', use_lexicon=False, log=False, mlm_bert=False)
+    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt')
+    obj_args = EeArgs('obj', use_lexicon=False, log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_nolexicon_usedemo_allmatch_len512_bs24.pt')
     predict_tool = Predictor(ner_args, obj_args)
     t_path = 'data/ee/duee/duee_test2.json'
-    output_path = 'log/output %s.json' % (
-        datetime.fromtimestamp(int(time())))
+    output_path = name_with_date('output')
     predict_tool.joint_predict(t_path, output_path)
-    
+
 

@@ -232,7 +232,7 @@ class EePipeline:
             bj_outputs, id2label, return_report)
         mirco_metrics = np.sum(role_metric, axis=0)
         mirco_metrics = get_argu_p_r_f(
-            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
+            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3])
         res = {
             "precision": mirco_metrics[0],
             "recall": mirco_metrics[1],
@@ -247,7 +247,7 @@ class EePipeline:
 
     def get_bj_metrics_helper(self, outputs, id2label, return_report):
         total_count = [0 for _ in range(len(id2label))]
-        role_metric = np.zeros([len(id2label), 3])
+        role_metric = np.zeros([len(id2label), 4])
         s_logits = outputs["s_logits"]
         e_logits = outputs["e_logits"]
         s_label = outputs["start_labels"]
@@ -659,28 +659,7 @@ class EePipeline:
 
 if __name__ == '__main__':
 
-    args = EeArgs('obj',log=True,model='roberta',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-    torch.cuda.empty_cache()
-
-    args = EeArgs('obj',log=True,model='macbert',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-    torch.cuda.empty_cache()
-
-    args = EeArgs('obj',log=True,model='bert',use_demo=False,output_name='no_lexicon_no_demo_len256_bs32')
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-    torch.cuda.empty_cache()
-
-    args = EeArgs('ner',log=True,model='roberta',use_lexicon=False,output_name='no_lexicon_len256_bs32')
+    args = EeArgs('obj',log=True,model='roberta',output_name='mergedRole_noLexicon_useDemo_allMatch_len384_bs32')
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
     ee_pipeline.train()

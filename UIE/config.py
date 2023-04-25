@@ -24,23 +24,39 @@ model_dict = {
 
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,use_demo=True):
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,use_demo=True,weight_path=None):
         self.tasks = [task]
         self.data_name = "duee"
         self.data_dir = "ee"
 
-        if model in model_dict:
-            self.bert_dir = model_dict[model]
-        else:
-            self.bert_dir = model_dict['bert']
-            print('[WARNING] 模型{}不存在,自动加载chinese-bert-wwm-ext'.format(model))
 
-        if output_name is None:
-            self.save_dir = "./checkpoints/{}/{}_{}_{}_test.pt".format(
-                self.data_dir, self.tasks[0], self.data_name, model)
+        if weight_path is not None:
+            self.save_dir = weight_path
+            if 'roberta' in weight_path:
+                self.bert_dir = model_dict['roberta']
+            elif 'mlmbert' in weight_path:
+                self.bert_dir = model_dict['mlmbert']
+            elif 'macbert' in weight_path:
+                self.bert_dir = model_dict['macbert']
+            else:
+                self.bert_dir = model_dict['bert']
+            print('[推理模式] 加载模型{}'.format(self.bert_dir))
+
         else:
-            self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
-                self.data_dir, self.tasks[0], self.data_name, model, output_name)
+            if model in model_dict:
+                self.bert_dir = model_dict[model]
+            else:
+                self.bert_dir = model_dict['bert']
+                print('[警告] 模型{}不存在,自动加载chinese-bert-wwm-ext'.format(model))
+
+            if output_name is None:
+                self.save_dir = "./checkpoints/{}/{}_{}_{}_test.pt".format(
+                    self.data_dir, self.tasks[0], self.data_name, model)
+            else:
+                self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
+                    self.data_dir, self.tasks[0], self.data_name, model, output_name)
+            
+
 
         self.train_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
@@ -66,11 +82,11 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 40
-        self.train_batch_size = 32
-        self.eval_batch_size = 32
+        self.train_epoch = 20
+        self.train_batch_size = 24
+        self.eval_batch_size = 24
         self.eval_step = 500
-        self.max_seq_len = 256
+        self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
