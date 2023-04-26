@@ -125,7 +125,7 @@ def get_p_r_f(tp, fp, fn):
     return np.array([p, r, f1])
 
 
-def classification_report(metrics_matrix, label_list, id2label, total_count, digits=2, suffix=False):
+def classification_report(metrics_matrix, label_list, id2label, total_count, digits=2, metrics_type='obj'):
     name_width = max([len(label) for label in label_list])
     last_line_heading = 'micro-f1'
     width = max(name_width, len(last_line_heading), digits)
@@ -140,10 +140,12 @@ def classification_report(metrics_matrix, label_list, id2label, total_count, dig
     ps, rs, f1s, s = [], [], [], []
     for label_id, label_matrix in enumerate(metrics_matrix):
         type_name = id2label[label_id]
-        if len(label_matrix) == 3:
+        if metrics_type == 'ner':
             p, r, f1 = get_p_r_f(label_matrix[0], label_matrix[1], label_matrix[2])
-        else:
+        elif metrics_type == 'obj':
             p, r, f1 = get_argu_p_r_f(label_matrix[0], label_matrix[1], label_matrix[2], label_matrix[3])
+        else:
+            raise AttributeError("【classification_report】metric类型只能为obj或者ner")            
         nb_true = total_count[label_id]
         report += row_fmt.format(*[type_name, p, r,
                                  f1, nb_true], width=width, digits=digits)
@@ -154,12 +156,14 @@ def classification_report(metrics_matrix, label_list, id2label, total_count, dig
 
     report += u'\n'
     mirco_metrics = np.sum(metrics_matrix, axis=0)
-    if len(mirco_metrics) == 3:
+    if metrics_type == 'ner':
         mirco_metrics = get_p_r_f(
             mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
-    else:
+    elif metrics_type == 'obj':
         mirco_metrics = get_argu_p_r_f(
-            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3])        
+            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3])   
+    else:
+        raise AttributeError("【classification_report】metric类型只能为obj或者ner")     
     # compute averages
     report += row_fmt.format(last_line_heading,
                              mirco_metrics[0],

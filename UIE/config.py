@@ -81,7 +81,7 @@ class EeArgs:
         self.ner_num_labels = len(self.entity_label)
         self.train_epoch = 20
         self.train_batch_size = 32
-        self.eval_batch_size = 8
+        self.eval_batch_size = 32
         self.eval_step = 300
         self.max_seq_len = 512
         self.weight_decay = 0.01

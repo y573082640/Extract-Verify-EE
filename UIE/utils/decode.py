@@ -76,8 +76,8 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
     """
     predict_entities = defaultdict(list)
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.45, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.45, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
         start_pred = start_logit[1:len(raw_text)+1]
         end_pred = end_logit[1:len(raw_text)+1]
         for i, s_type in enumerate(start_pred):
@@ -104,8 +104,8 @@ def ner_decode2(start_logits, end_logits, length, id2label):
     # print(end_pred)
 
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.45, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.45, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
         # print(start_logit)
         # print(end_logit)
         # print("="*100)

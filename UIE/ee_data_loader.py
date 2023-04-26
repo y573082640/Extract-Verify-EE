@@ -13,7 +13,7 @@ from utils.question_maker import Sim_scorer, creat_demo, creat_argu_token, creat
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, generate_instance_with_gaz, batchify_augment_ids
-from utils.question_maker import get_question_for_argument,create_role_tuple
+from utils.question_maker import get_question_for_argument,create_role_tuple,create_role_tuple_for_predict
 NULLKEY = "-null-"
 
 
@@ -66,41 +66,69 @@ class EeDatasetPredictor(ListDataset):
             'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
         }
         """
-        sim_scorer = self.args.sim_scorer
-        text_embs, text_tuples = sim_scorer.create_embs_and_tuples(
-            data_list=self.data, label2role=self.args.label2role)
-        demo_embs = self.args.demo_embs
-        demo_tuples = self.args.demo_tuples
-        most_sim = sim_scorer.sim_match(
-            text_embs, demo_embs, rank=0)  # {corpus_id,score} rank表示取最相似的还是次相似的
         ret = []
-        for idx, text_tuple in enumerate(text_tuples):
-            sim_id = most_sim[idx]['corpus_id']
-            demo = creat_demo(demo_tuples[sim_id])
-            obj_tokens, token_type_ids = creat_argu_token(
-                text_tuple, demo, self.args.max_seq_len)
-            if self.args.use_lexicon:
-                augment_Ids = generate_instance_with_gaz(
-                    obj_tokens,
-                    self.args.pos_alphabet,
-                    self.args.word_alphabet,
-                    self.args.biword_alphabet,
-                    self.args.gaz_alphabet,
-                    self.args.gaz_alphabet_count,
-                    self.args.gaz,
-                    self.args.max_seq_len)
-                augment_Ids = batchify_augment_ids(
-                    [augment_Ids], self.args.max_seq_len)
-            else:
-                augment_Ids = []
+        if self.args.use_demo:
+            sim_scorer = self.args.sim_scorer
+            text_embs, text_tuples = sim_scorer.create_embs_and_tuples(
+                data_list=self.data, label2role=self.args.label2role)
+            demo_embs = self.args.demo_embs
+            demo_tuples = self.args.demo_tuples
+            most_sim = sim_scorer.sim_match(
+                text_embs, demo_embs, rank=0)  # {corpus_id,score} rank表示取最相似的还是次相似的
+            for idx, text_tuple in enumerate(text_tuples):
+                sim_id = most_sim[idx]['corpus_id']
+                demo = creat_demo(demo_tuples[sim_id])
+                obj_tokens, token_type_ids = creat_argu_token(
+                    text_tuple, demo, self.args.max_seq_len)
+                if self.args.use_lexicon:
+                    augment_Ids = generate_instance_with_gaz(
+                        obj_tokens,
+                        self.args.pos_alphabet,
+                        self.args.word_alphabet,
+                        self.args.biword_alphabet,
+                        self.args.gaz_alphabet,
+                        self.args.gaz_alphabet_count,
+                        self.args.gaz,
+                        self.args.max_seq_len)
+                    augment_Ids = batchify_augment_ids(
+                        [augment_Ids], self.args.max_seq_len)
+                else:
+                    augment_Ids = []
 
-            ret.append({
-                'obj_tokens': obj_tokens,
-                'token_type_ids': token_type_ids,
-                'augment_Ids': augment_Ids,
-                'event_id': text_tuple['event_id'],
-                'role': text_tuple['role'],
-            })
+                ret.append({
+                    'obj_tokens': obj_tokens,
+                    'token_type_ids': token_type_ids,
+                    'augment_Ids': augment_Ids,
+                    'event_id': text_tuple['event_id'],
+                    'role': text_tuple['role'],
+                })
+        else:
+            text_tuples,_ = create_role_tuple_for_predict(data_list=self.data, label2role=self.args.label2role)
+            for idx, text_tuple in enumerate(text_tuples):
+                obj_tokens, token_type_ids = creat_argu_token(
+                    text_tuple, None, self.args.max_seq_len)
+                if self.args.use_lexicon:
+                    augment_Ids = generate_instance_with_gaz(
+                        obj_tokens,
+                        self.args.pos_alphabet,
+                        self.args.word_alphabet,
+                        self.args.biword_alphabet,
+                        self.args.gaz_alphabet,
+                        self.args.gaz_alphabet_count,
+                        self.args.gaz,
+                        self.args.max_seq_len)
+                    augment_Ids = batchify_augment_ids(
+                        [augment_Ids], self.args.max_seq_len)
+                else:
+                    augment_Ids = []
+
+                ret.append({
+                    'obj_tokens': obj_tokens,
+                    'token_type_ids': token_type_ids,
+                    'augment_Ids': augment_Ids,
+                    'event_id': text_tuple['event_id'],
+                    'role': text_tuple['role'],
+                })
 
         self.data = ret
         logging.info('data_list数据预处理完成')
@@ -324,7 +352,8 @@ class EeDataset(ListDataset):
                                            ][trigger_start_index+1] = 1  # TODO: 如果丢入分类器前要去掉CLS，则不用+1
                         event_end_labels[ent_label2id[event_type]
                                          ][trigger_start_index+len(trigger)] = 1
-
+                        
+                        span_tuple[event_type].append()
                     event_data = {
                         "ner_tokens": event_tokens,
                         "ner_start_labels": event_start_labels,

@@ -44,6 +44,46 @@ def create_role_tuple(event):
             })
     return tuples,concat_texts
 
+def create_role_tuple_for_predict(data_list,label2role):
+    """
+    用于推理
+    event = {
+        "event_type":e_type,
+        'text':text,
+        'trigger':trg_tuple[0],
+        'trigger_start_index':trg_tuple[1],
+        'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
+    }
+    """
+    tuples,concat_texts = [],[]
+    for tgr_idx, event in enumerate(data_list):
+        event_type = event["event_type"]
+        trigger = event["trigger"]
+        argu_types = label2role[event_type]
+        textb = event["text"]
+        trigger_start_index = event["trigger_start_index"]
+        event_id = event["event_id"]
+        for role in argu_types:
+            # 组织行为-游行_时间
+            # 此处是为了配合get_question_for_argument函数，转变为"时间"
+            role = role.split('_')[-1]
+            q = get_question_for_argument(event_type, role)
+            text_tuple = {
+                'text': textb,
+                'trigger': trigger,
+                'question': q,
+                'trigger_start_index': trigger_start_index,
+                'arguments': None,
+                'role': role,
+                'event_type': event_type,
+                'event_id': event_id
+            }
+            concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
+                q, trigger, len(textb)))
+            tuples.append(text_tuple)
+    return tuples,concat_texts
+
+
 def get_question_for_verify(event_type, role):
     complete_slot_str = event_type + "-" + role
     query_str = argument2question.get(complete_slot_str)
@@ -203,64 +243,23 @@ class Sim_scorer:
 
         return sentence_embeddings.cpu()
 
-    def create_embs_and_tuples(self, filename=None, data_list=None, label2role=False):
+    def create_embs_and_tuples(self, filename=None):
         concat_texts = []
         embs = []
         tuples = []
-        if filename is not None:
-            # 用于训练和预测
-            with open(filename, encoding='utf-8') as f:
-                f = f.read().strip().split("\n")
-                for evt_idx, line in enumerate(f):
-                    evt = json.loads(line)
-                    text = evt["text"]
-
-                    if len(text) == 0:
-                        continue
-
-                    batch_tuples,batch_concat_texts = create_role_tuple(evt)
-                    concat_texts += batch_concat_texts
-                    tuples += batch_tuples
-
-        elif data_list is not None and label2role is not None:
-            """
-            用于推理
-            event = {
-                "event_type":e_type,
-                'text':text,
-                'trigger':trg_tuple[0],
-                'trigger_start_index':trg_tuple[1],
-                'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
-            }
-            """
-            for tgr_idx, event in enumerate(data_list):
-                event_type = event["event_type"]
-                trigger = event["trigger"]
-                argu_types = label2role[event_type]
-                textb = event["text"]
-                trigger_start_index = event["trigger_start_index"]
-                event_id = event["event_id"]
-                for role in argu_types:
-                    # 组织行为-游行_时间
-                    # 此处是为了配合get_question_for_argument函数，转变为"时间"
-                    role = role.split('_')[-1]
-                    q = get_question_for_argument(event_type, role)
-                    text_tuple = {
-                        'text': textb,
-                        'trigger': trigger,
-                        'question': q,
-                        'trigger_start_index': trigger_start_index,
-                        'arguments': None,
-                        'role': role,
-                        'event_type': event_type,
-                        'event_id': event_id
-                    }
-                    concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
-                        q, trigger, len(textb)))
-                    tuples.append(text_tuple)
+        # 用于训练
+        with open(filename, encoding='utf-8') as f:
+            f = f.read().strip().split("\n")
+            for evt_idx, line in enumerate(f):
+                evt = json.loads(line)
+                text = evt["text"]
+                if len(text) == 0:
+                    continue
+                batch_tuples,batch_concat_texts = create_role_tuple(evt)
+                concat_texts += batch_concat_texts
+                tuples += batch_tuples
 
         embs = self._batch_encode(batch_size=32, dataset=concat_texts)
-        
         return embs, tuples
 
     def sim_match(self, text_embs, demo_embs, rank=1):

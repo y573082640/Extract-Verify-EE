@@ -186,18 +186,18 @@ class Predictor:
         answer = self.accumulate_answer(argu_input, verified_result)
 
         ### 暂时保存中间输出用于分析
-        with open(name_with_date('ner_result'), 'w') as fp:
-            for a in ner_result:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
-        with open(name_with_date('obj_result'), 'w') as fp:
-            for a in obj_result:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
-        with open(name_with_date('verified_result'), 'w') as fp:
-            for a in answer:
-                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-                fp.write('\n')
+        # with open(name_with_date('ner_result'), 'w') as fp:
+        #     for a in ner_result:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+        #         fp.write('\n')
+        # with open(name_with_date('obj_result'), 'w') as fp:
+        #     for a in obj_result:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+        #         fp.write('\n')
+        # with open(name_with_date('verified_result'), 'w') as fp:
+        #     for a in answer:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+        #         fp.write('\n')
         ##
 
         logging.info('...后处理...')
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt')
     obj_args = EeArgs('obj', use_demo=False, log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = 'data/ee/duee/duee_test2.json'
+    t_path = 'data/ee/duee/duee_test2_toy.json'
     output_path = name_with_date('output')
     predict_tool.joint_predict(t_path, output_path)
 

@@ -229,7 +229,7 @@ class EePipeline:
         }
         if return_report:
             report = classification_report(
-                role_metric, label, id2label, total_count)
+                role_metric, label, id2label, total_count,metrics_type='obj')
             res["report"] = report
         return res
 
@@ -299,7 +299,7 @@ class EePipeline:
         }
         if return_report:
             report = classification_report(
-                role_metric, label, id2label, total_count)
+                role_metric, label, id2label, total_count,metrics_type='ner')
             res["report"] = report
         return res
 
@@ -508,8 +508,8 @@ class EePipeline:
                                                                                          metrics["f1"])
             logging.info(output_info)
             logging.info(metrics["report"])
-            print(output_info)
-            print(metrics["report"])
+            # print(output_info)
+            # print(metrics["report"])
 
     def predict(self, filepath=None, data=None):
 
