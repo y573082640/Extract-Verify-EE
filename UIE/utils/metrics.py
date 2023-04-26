@@ -118,7 +118,7 @@ def get_argu_p_r_f(count_predict, count_groundtruth, count_share_in_predict_text
 
 
 def get_p_r_f(tp, fp, fn):
-    print(tp, fp, fn)
+    # print(tp, fp, fn)
     p = tp / (tp + fp) if tp + fp != 0 else 0
     r = tp / (tp + fn) if tp + fn != 0 else 0
     f1 = 2 * p * r / (p + r) if p + r != 0 else 0

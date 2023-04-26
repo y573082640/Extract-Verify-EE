@@ -146,10 +146,14 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
     trigger_start_index = text_tuple['trigger_start_index']
     ## 用于计算应该给argument_start_index加多少偏置
     question = text_tuple['question']
+
+    #计算文本的偏置pre_tokens，用于构造label
     if demo is not None:
-        pre_tokens = demo + [i for i in question] + ['[SEP]']
+        pre_tokens =  demo + [i for i in question]  
     else:
-        pre_tokens = [i for i in question] + ['[SEP]']
+        pre_tokens =  [i for i in question]
+    pre_tokens = ['[CLS]'] + pre_tokens + ['[SEP]']
+
     # 用于增加对arg的偏置
     tgr1_index = trigger_start_index
     tgr2_index = trigger_start_index + 1 + len(trigger)
@@ -163,13 +167,17 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
             argument_start_index += 1
         if tgr2_index <= argument_start_index:
             argument_start_index += 1
-        argu_start = len(pre_tokens) + 1 + argument_start_index
+        
+        ## 注意-1
+        argu_start = len(pre_tokens) + argument_start_index
         argu_end = argu_start + len(argument_text) - 1
+
+        ## 长文本特例
         if argu_end < max_len :
             argu_start_labels[argu_start] = 1
             argu_end_labels[argu_end] = 1
             argu_tuples.append((argu_start,argu_end+1))
-    assert len(argu_tuples) > 0
+
     return argu_start_labels, argu_end_labels , argu_tuples
 
 
@@ -185,6 +193,7 @@ def creat_argu_token(text_tuple, demo, max_len):
     text_tokens.insert(tgr1_index, '[TGR]')
     text_tokens.insert(tgr2_index, '[TGR]')
 
+    #适应拼接或者不拼接的状态
     if demo is not None:
         pre_tokens = demo + [i for i in question] + ['[SEP]']
     else:
@@ -194,9 +203,11 @@ def creat_argu_token(text_tuple, demo, max_len):
         argu_token = (pre_tokens + text_tokens)[:max_len-2]
     else:
         argu_token = pre_tokens + text_tokens
+
+    # 首尾补充特殊字符
     argu_token = ['[CLS]'] + argu_token + ['[SEP]']
     token_type_ids = [0] * len(argu_token)  # [CLS] +　pre_tokens
-    # token_type_ids += [1] * (len(argu_token) - len(token_type_ids))
+
     return argu_token, token_type_ids
 
 

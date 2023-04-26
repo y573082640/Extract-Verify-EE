@@ -84,7 +84,7 @@ class EePipeline:
         argu_tuples = []
         masks = None
         self.model.eval()
-        for eval_step, batch_data in enumerate(data_loader):
+        for batch_data in tqdm.tqdm(data_loader):
             for key in batch_data.keys():
                 if key not in self.args.ignore_key:
                     batch_data[key] = batch_data[key].to(self.args.device)
@@ -131,6 +131,7 @@ class EePipeline:
             raw_tokens += batch_data['raw_tokens']
             argu_tuples += batch_data['argu_tuples']
 
+        
         bj_outputs = {
             "s_logits": s_logits,
             "e_logits": e_logits,
@@ -160,7 +161,7 @@ class EePipeline:
         ner_start_labels = None
         ner_end_labels = None
         self.model.eval()
-        for eval_step, batch_data in enumerate(data_loader):
+        for batch_data in tqdm.tqdm(data_loader):
             for key in batch_data.keys():
                 if key not in self.args.ignore_key:
                     batch_data[key] = batch_data[key].to(self.args.device)
@@ -648,16 +649,17 @@ class EePipeline:
                 return ret
 
 if __name__ == '__main__':
-
+    obj_weight = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt'
     ner_weright = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt'    
     # args = EeArgs('obj',log=True,model='roberta',use_demo=False,weight_path='checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
     # model = UIEModel(args)
     # ee_pipeline = EePipeline(model, args)
     # ee_pipeline.test()
     # torch.cuda.empty_cache()
-
-    args = EeArgs('ner',log=True,model='roberta',weight_path=ner_weright)
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.test()
-    torch.cuda.empty_cache()
+    for t_path in ['1_2.json','2_3.json','3_4.json','4_5.json','5_6.json']:
+        args = EeArgs('obj',log=True,use_demo=False, model='roberta',weight_path=obj_weight)
+        args.test_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/experiment/train_only/split_by_argu_num/{}'.format(t_path)
+        model = UIEModel(args)
+        ee_pipeline = EePipeline(model, args)
+        ee_pipeline.test()
+        torch.cuda.empty_cache()

@@ -353,7 +353,7 @@ class EeDataset(ListDataset):
                         event_end_labels[ent_label2id[event_type]
                                          ][trigger_start_index+len(trigger)] = 1
                         
-                        span_tuple[event_type].append()
+                        # span_tuple[event_type].append()
                     event_data = {
                         "ner_tokens": event_tokens,
                         "ner_start_labels": event_start_labels,
@@ -426,7 +426,7 @@ class EeDataset(ListDataset):
                     obj_data.append(argu_data)
             else:
                 tuples = []
-                with open(filename, encoding='utf-8') as f:
+                with open(filename,'r',encoding='utf-8') as f:
                     f = f.read().strip().split("\n")
                     for evt_idx, line in enumerate(f):
                         evt = json.loads(line)
@@ -435,7 +435,6 @@ class EeDataset(ListDataset):
                             continue
                         batch_tuples,_ = create_role_tuple(evt)
                         tuples += batch_tuples
-
                 for text_tuple in tuples:
                     argu_token, obj_token_type_ids = creat_argu_token(
                         text_tuple=text_tuple, 

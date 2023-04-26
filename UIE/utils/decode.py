@@ -78,8 +78,11 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
     for label_id in range(len(id2label)):
         start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
         end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
+
+        #实际原文本中没有[CLS]和[SEP]，所以+1
         start_pred = start_logit[1:len(raw_text)+1]
         end_pred = end_logit[1:len(raw_text)+1]
+
         for i, s_type in enumerate(start_pred):
             if s_type == 0:
                 continue
@@ -118,7 +121,7 @@ def ner_decode2(start_logits, end_logits, length, id2label):
             for j, e_type in enumerate(end_pred[i:]):
                 if s_type == e_type:
                     predict_entities[id2label[label_id]].append((i, i+j+1))
-                    # 找到距离自己最近的结束符号就停止了
+                    # TODO:找到距离自己最近的结束符号就停止了，考虑贪心匹配？
                     break
     return predict_entities
 
