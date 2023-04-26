@@ -214,7 +214,7 @@ class Predictor:
 
 if __name__ == "__main__":
     ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt')
-    obj_args = EeArgs('obj', use_lexicon=False, log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_nolexicon_usedemo_allmatch_len512_bs24.pt')
+    obj_args = EeArgs('obj', use_demo=False, log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
     predict_tool = Predictor(ner_args, obj_args)
     t_path = 'data/ee/duee/duee_test2.json'
     output_path = name_with_date('output')
