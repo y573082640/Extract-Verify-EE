@@ -95,18 +95,30 @@ class Predictor:
 
     def _create_verified_dataset(self, argu_input, obj_result):
         dataset = []
-        ret = {}
-        # 构建事件
-        for e in argu_input:
-            if not ret.__contains__(e['event_id']):
-                ret[e['event_id']] = e
+        evt = {}
+        evt_role = {} #事件论元集合，key为事件id+论元类型，value为数组
+        for e in argu_input:# 事件数据
+            key = e['event_id']
+            if not evt.__contains__(key):
+                evt[key] = e 
+        
+        for argu in obj_result: #论元数据
+            if len(argu['argument']) == 0:
+                continue
+            key = argu['event_id'] + argu['role']
+            if not evt_role.__contains__(key):
+                evt_role[key] = [argu]
+            else:
+                evt_role[key].append(argu)
 
-        for argu in obj_result:
-            e = ret[argu['event_id']]
-            merged_object = {**e, **argu}
+        evt_role = list(evt_role.values())
+        for value in evt_role: 
+            argu = value[0]
+            e = evt[argu['event_id']]
+            merged_object = {**e, **argu} # 构建对应论元的问题
             dataset.append(map_fn(merged_object,mode='exist'))
 
-        return dataset
+        return evt_role,dataset
 
     def accumulate_answer(self, argu_input, obj_result):
         ret = {}
@@ -148,7 +160,7 @@ class Predictor:
 
     def verify_result(self, argu_input, obj_result, batch_size=64, model_path="checkpoints/ee/mlm_label"):
 
-        datas = self._create_verified_dataset(argu_input, obj_result)
+        evt_role,datas = self._create_verified_dataset(argu_input, obj_result)
         # load your model and tokenizer from a local directory or a URL
 
         model = BertForMaskedLM.from_pretrained(model_path)
@@ -167,7 +179,7 @@ class Predictor:
         ret = []
         for i, result in enumerate(results):
             if result[0]['token_str'] == '是':
-                ret.append(obj_result[i])
+                ret += evt_role[i]
         return ret
 
     def joint_predict(self, filepath, output):
@@ -178,7 +190,6 @@ class Predictor:
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
-
         logging.info('...进行验证过滤')
         verified_result = self.verify_result(argu_input, obj_result)
         torch.cuda.empty_cache()
@@ -186,18 +197,18 @@ class Predictor:
         answer = self.accumulate_answer(argu_input, verified_result)
 
         ### 暂时保存中间输出用于分析
-        # with open(name_with_date('ner_result'), 'w') as fp:
-        #     for a in ner_result:
-        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-        #         fp.write('\n')
-        # with open(name_with_date('obj_result'), 'w') as fp:
-        #     for a in obj_result:
-        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-        #         fp.write('\n')
-        # with open(name_with_date('verified_result'), 'w') as fp:
-        #     for a in answer:
-        #         json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
-        #         fp.write('\n')
+        with open(name_with_date('ner_result'), 'w') as fp:
+            for a in ner_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open(name_with_date('obj_result'), 'w') as fp:
+            for a in obj_result:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
+        with open(name_with_date('verified_result'), 'w') as fp:
+            for a in answer:
+                json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
+                fp.write('\n')
         ##
 
         logging.info('...后处理...')
