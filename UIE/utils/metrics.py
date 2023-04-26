@@ -67,9 +67,20 @@ def word_level_calculate_metric(predict, gt, text):
     groudtruth_texts = []
     for entity_predict in predict:
         predict_texts.append(
-            "".join(text[entity_predict[0]:entity_predict[1]]))
+            "".join(text[entity_predict[0]:entity_predict[1]]).replace("[TGR]", ""))
     for entity_gt in gt:
-        groudtruth_texts.append("".join(text[entity_gt[0]:entity_gt[1]]))
+        groudtruth_texts.append("".join(text[entity_gt[0]:entity_gt[1]]).replace("[TGR]", ""))
+
+    # print('------------------------------')
+    # print('predict_texts')
+    # print(predict_texts)
+    # print('groudtruth_texts')
+    # print(groudtruth_texts)
+    # print('gt')
+    # print(gt)
+    # print('text')
+    # print(text)
+    # print('------------------------------')
 
     count_predict, count_groundtruth, count_share_in_predict_texts,count_share_in_groudtruth_texts = 0, 0, 0 , 0
 
@@ -129,7 +140,10 @@ def classification_report(metrics_matrix, label_list, id2label, total_count, dig
     ps, rs, f1s, s = [], [], [], []
     for label_id, label_matrix in enumerate(metrics_matrix):
         type_name = id2label[label_id]
-        p, r, f1 = get_p_r_f(label_matrix[0], label_matrix[1], label_matrix[2])
+        if len(label_matrix) == 3:
+            p, r, f1 = get_p_r_f(label_matrix[0], label_matrix[1], label_matrix[2])
+        else:
+            p, r, f1 = get_argu_p_r_f(label_matrix[0], label_matrix[1], label_matrix[2], label_matrix[3])
         nb_true = total_count[label_id]
         report += row_fmt.format(*[type_name, p, r,
                                  f1, nb_true], width=width, digits=digits)
@@ -140,8 +154,12 @@ def classification_report(metrics_matrix, label_list, id2label, total_count, dig
 
     report += u'\n'
     mirco_metrics = np.sum(metrics_matrix, axis=0)
-    mirco_metrics = get_p_r_f(
-        mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
+    if len(mirco_metrics) == 3:
+        mirco_metrics = get_p_r_f(
+            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
+    else:
+        mirco_metrics = get_argu_p_r_f(
+            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3])        
     # compute averages
     report += row_fmt.format(last_line_heading,
                              mirco_metrics[0],

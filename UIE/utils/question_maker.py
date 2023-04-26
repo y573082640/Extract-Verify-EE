@@ -13,6 +13,37 @@ argument2question_path = 'data/ee/duee/argument2question.json'
 with open(argument2question_path, 'r') as fp:
     argument2question = json.load(fp)
 
+def create_role_tuple(event):
+    tuples = []
+    concat_texts = []
+    text = event["text"]
+    event_list = event["event_list"]    
+    for tgr_idx, event in enumerate(event_list):
+        event_type = event["event_type"]
+        trigger = event["trigger"]
+        role_dict = {}
+        for aru_idx, argument in enumerate(event["arguments"]):
+            role = argument["role"]
+            if role not in role_dict:
+                role_dict[role] = [argument]
+            else:
+                role_dict[role].append(argument)
+
+        for role, arguments in role_dict.items():
+            question = get_question_for_argument(
+                event_type=event_type, role=role)
+            concat_texts.append("事件类型是%s,%s,事件触发词是%s,文本长度是%d" % (event_type, question, trigger, len(text)))
+            tuples.append({
+                'text': text,
+                'trigger': trigger,
+                'question': question,
+                'trigger_start_index': event["trigger_start_index"],
+                'arguments': arguments,
+                'role': argument["role"],
+                'event_type': event["event_type"]
+            })
+    return tuples,concat_texts
+
 def get_question_for_verify(event_type, role):
     complete_slot_str = event_type + "-" + role
     query_str = argument2question.get(complete_slot_str)
@@ -84,19 +115,22 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
     tgr2_index = trigger_start_index + 1 + len(trigger)
 
     ## 用于计算所有事件论的起止位置
+    argu_tuples = []
     for argu in text_tuple["arguments"]:
         argument_start_index = argu['argument_start_index']
+        argument_text = argu['argument']
         if tgr1_index <= argument_start_index:
             argument_start_index += 1
         if tgr2_index <= argument_start_index:
             argument_start_index += 1
         argu_start = len(pre_tokens) + 1 + argument_start_index
-        argu_end = argu_start + len(argu) - 1
+        argu_end = argu_start + len(argument_text) - 1
         if argu_end < max_len :
             argu_start_labels[argu_start] = 1
             argu_end_labels[argu_end] = 1
-
-    return argu_start_labels, argu_end_labels
+            argu_tuples.append((argu_start,argu_end+1))
+    assert len(argu_tuples) > 0
+    return argu_start_labels, argu_end_labels , argu_tuples
 
 
 def creat_argu_token(text_tuple, demo, max_len):
@@ -177,40 +211,17 @@ class Sim_scorer:
             # 用于训练和预测
             with open(filename, encoding='utf-8') as f:
                 f = f.read().strip().split("\n")
-                for evt_idx, d in enumerate(f):
-                    d = json.loads(d)
-                    text = d["text"]
+                for evt_idx, line in enumerate(f):
+                    evt = json.loads(line)
+                    text = evt["text"]
 
-                    event_list = d["event_list"]
                     if len(text) == 0:
                         continue
 
-                    for tgr_idx, event in enumerate(event_list):
-                        event_type = event["event_type"]
-                        trigger = event["trigger"]
-                        role_dict = {}
-                        for aru_idx, argument in enumerate(event["arguments"]):
-                            role = argument["role"]
-                            if role not in role_dict:
-                                role_dict[role] = []
-                            else:
-                                role_dict[role].append(argument)
+                    batch_tuples,batch_concat_texts = create_role_tuple(evt)
+                    concat_texts += batch_concat_texts
+                    tuples += batch_tuples
 
-                        for role, arguments in role_dict.items():
-                            question = get_question_for_argument(
-                                event_type=event_type, role=role)
-                            # 文本越短越好匹配，考虑四个要素：类型、角色、触发词和文本长度。
-                            concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (
-                                question, trigger, len(text)))
-                            tuples.append({
-                                'text': text,
-                                'trigger': trigger,
-                                'question': question,
-                                'trigger_start_index': event["trigger_start_index"],
-                                'arguments': arguments,
-                                'role': argument["role"],
-                                'event_type': event["event_type"]
-                            })
         elif data_list is not None and label2role is not None:
             """
             用于推理
@@ -248,7 +259,7 @@ class Sim_scorer:
                         q, trigger, len(textb)))
                     tuples.append(text_tuple)
 
-        embs = self._batch_encode(batch_size=256, dataset=concat_texts)
+        embs = self._batch_encode(batch_size=32, dataset=concat_texts)
         
         return embs, tuples
 

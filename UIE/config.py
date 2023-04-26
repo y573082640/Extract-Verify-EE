@@ -29,7 +29,6 @@ class EeArgs:
         self.data_name = "duee"
         self.data_dir = "ee"
 
-
         if weight_path is not None:
             self.save_dir = weight_path
             if 'roberta' in weight_path:
@@ -55,8 +54,6 @@ class EeArgs:
             else:
                 self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
                     self.data_dir, self.tasks[0], self.data_name, model, output_name)
-            
-
 
         self.train_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
@@ -71,7 +68,7 @@ class EeArgs:
         self.demo_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
         self.sim_model = 'model_hub/paraphrase-MiniLM-L6-v2'
-        self.ignore_key = ['argu_roles', 'raw_tokens',
+        self.ignore_key = ['argu_roles', 'raw_tokens','argu_tuples',
                            'batch_augment_Ids', 'text_ids']
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
@@ -83,9 +80,9 @@ class EeArgs:
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
         self.train_epoch = 20
-        self.train_batch_size = 24
-        self.eval_batch_size = 24
-        self.eval_step = 500
+        self.train_batch_size = 32
+        self.eval_batch_size = 8
+        self.eval_step = 300
         self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8

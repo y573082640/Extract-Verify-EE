@@ -13,7 +13,7 @@ from utils.question_maker import Sim_scorer, creat_demo, creat_argu_token, creat
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, generate_instance_with_gaz, batchify_augment_ids
-from utils.question_maker import get_question_for_argument
+from utils.question_maker import get_question_for_argument,create_role_tuple
 NULLKEY = "-null-"
 
 
@@ -352,9 +352,13 @@ class EeDataset(ListDataset):
                     sim_score = most_sim[idx]['score']
 
                     demo = creat_demo(demo_tuples[sim_id])
+
+                    if len(demo) + len(text_tuple['question']+text_tuple['text']) + 1> max_len - 2: ### +1是因为中间有个[SEP]
+                        demo = None
+
                     argu_token, obj_token_type_ids = creat_argu_token(
                         text_tuple, demo, max_len)
-                    argu_start_labels, argu_end_labels = creat_argu_labels(
+                    argu_start_labels, argu_end_labels, argu_tuples = creat_argu_labels(
                         argu_token, demo, text_tuple, max_len)
 
                     # logging.info('============')
@@ -386,77 +390,62 @@ class EeDataset(ListDataset):
                         "obj_end_labels": argu_end_labels,
                         'obj_token_type_ids': obj_token_type_ids,
                         "augment_Ids": augment_Ids,
-                        'sim_score': 1 if sim_score > 0.75 else 0
+                        'sim_score': 1 if sim_score > 0.75 else 0,
+                        "argu_tuples" : argu_tuples
                     }
 
                     obj_data.append(argu_data)
             else:
+                tuples = []
                 with open(filename, encoding='utf-8') as f:
                     f = f.read().strip().split("\n")
-                    for evt_idx, d in enumerate(f):
-                        d = json.loads(d)
-                        text = d["text"]
-
-                        event_list = d["event_list"]
+                    for evt_idx, line in enumerate(f):
+                        evt = json.loads(line)
+                        text = evt["text"]
                         if len(text) == 0:
                             continue
+                        batch_tuples,_ = create_role_tuple(evt)
+                        tuples += batch_tuples
 
-                        for tgr_idx, event in enumerate(event_list):
-                            event_type = event["event_type"]
-                            arguments = event["arguments"]
-                            trigger = event["trigger"]
+                for text_tuple in tuples:
+                    argu_token, obj_token_type_ids = creat_argu_token(
+                        text_tuple=text_tuple, 
+                        demo=None, 
+                        max_len=max_len)
+                    
+                    argu_start_labels, argu_end_labels,argu_tuples = creat_argu_labels(
+                        argu_token=argu_token, 
+                        demo=None, 
+                        text_tuple=text_tuple, 
+                        max_len=max_len)
 
-                            for aru_idx, argument in enumerate(arguments):
-                                role = argument["role"]
-                                question = get_question_for_argument(event_type=event_type, role=role)
-                                text_tuple = {
-                                    'text': text,
-                                    'trigger': trigger,
-                                    'question': question,
-                                    'trigger_start_index': event["trigger_start_index"],
-                                    'argument': argument["argument"],
-                                    'argument_start_index': argument["argument_start_index"],
-                                    'role': argument["role"],
-                                    'event_type': event["event_type"]
-                                }
+                    if len(argu_start_labels) == 0:
+                        continue
 
-                                argu_token, obj_token_type_ids = creat_argu_token(
-                                    text_tuple=text_tuple, 
-                                    demo=None, 
-                                    max_len=max_len)
-                                
-                                argu_start_labels, argu_end_labels = creat_argu_labels(
-                                    argu_token=argu_token, 
-                                    demo=None, 
-                                    text_tuple=text_tuple, 
-                                    max_len=max_len)
+                    if self.args.use_lexicon:
+                        augment_Ids = generate_instance_with_gaz(
+                            argu_token,
+                            self.args.pos_alphabet,
+                            self.args.word_alphabet,
+                            self.args.biword_alphabet,
+                            self.args.gaz_alphabet,
+                            self.args.gaz_alphabet_count,
+                            self.args.gaz,
+                            max_len)
+                    else:
+                        augment_Ids = []
 
-                                if len(argu_start_labels) == 0:
-                                    continue
+                    argu_data = {
+                        "obj_tokens": argu_token,
+                        "obj_start_labels": argu_start_labels,
+                        "obj_end_labels": argu_end_labels,
+                        'obj_token_type_ids': obj_token_type_ids,
+                        "augment_Ids": augment_Ids,
+                        'sim_score': 0,
+                        "argu_tuples":argu_tuples
+                    }
 
-                                if self.args.use_lexicon:
-                                    augment_Ids = generate_instance_with_gaz(
-                                        argu_token,
-                                        self.args.pos_alphabet,
-                                        self.args.word_alphabet,
-                                        self.args.biword_alphabet,
-                                        self.args.gaz_alphabet,
-                                        self.args.gaz_alphabet_count,
-                                        self.args.gaz,
-                                        max_len)
-                                else:
-                                    augment_Ids = []
-
-                                argu_data = {
-                                    "obj_tokens": argu_token,
-                                    "obj_start_labels": argu_start_labels,
-                                    "obj_end_labels": argu_end_labels,
-                                    'obj_token_type_ids': obj_token_type_ids,
-                                    "augment_Ids": augment_Ids,
-                                    'sim_score': 0
-                                }
-
-                                obj_data.append(argu_data)
+                    obj_data.append(argu_data)
 
         logging.info("数据集构建完毕")
         return ner_data if "ner" in tasks else obj_data
@@ -489,6 +478,7 @@ class EeCollate:
         batch_obj_token_type_ids = []
         batch_obj_start_labels = []
         batch_obj_end_labels = []
+        batch_obj_argu_tuples = []
         batch_augment_Ids = []
         batch_sim_score = []
         for i, data in enumerate(batch):
@@ -528,6 +518,7 @@ class EeCollate:
                 obj_start_labels = data["obj_start_labels"]
                 obj_end_labels = data["obj_end_labels"]
                 obj_token_type_ids = data["obj_token_type_ids"]
+                obj_argu_tuples = data['argu_tuples']
                 sim_score = data['sim_score']
 
                 if len(obj_tokens) < self.maxlen:
@@ -551,6 +542,7 @@ class EeCollate:
                 batch_obj_end_labels.append(obj_end_labels)
                 batch_raw_tokens.append(raw_tokens)
                 batch_sim_score.append(sim_score)
+                batch_obj_argu_tuples.append(obj_argu_tuples)
 
         res = {}
 
@@ -595,9 +587,9 @@ class EeCollate:
                 "re_obj_token_type_ids": batch_obj_token_type_ids,
                 "re_obj_start_labels": batch_obj_start_labels,
                 "re_obj_end_labels": batch_obj_end_labels,
-                'batch_sim_score': batch_sim_score
+                'batch_sim_score': batch_sim_score,
+                "argu_tuples" : batch_obj_argu_tuples
             }
-
             res = sbj_obj_res
 
         # 用于错误输出

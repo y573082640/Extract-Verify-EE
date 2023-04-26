@@ -81,9 +81,8 @@ class EePipeline:
         """主体或客体"""
         s_logits, e_logits = None, None
         raw_tokens = []
+        argu_tuples = []
         masks = None
-        start_labels = None
-        end_labels = None
         self.model.eval()
         for eval_step, batch_data in enumerate(data_loader):
             for key in batch_data.keys():
@@ -93,8 +92,8 @@ class EePipeline:
                 output = self.model(re_sbj_input_ids=batch_data["re_sbj_input_ids"],
                                     re_sbj_token_type_ids=batch_data["re_sbj_token_type_ids"],
                                     re_sbj_attention_mask=batch_data["re_sbj_attention_mask"],
-                                    re_sbj_start_labels=batch_data["re_sbj_start_labels"],
-                                    re_sbj_end_labels=batch_data["re_sbj_end_labels"],
+                                    re_sbj_start_labels=None,
+                                    re_sbj_end_labels=None,
                                     augment_Ids=batch_data["batch_augment_Ids"],
                                     sim_scores=batch_data["batch_sim_score"]
                                     )
@@ -104,15 +103,12 @@ class EePipeline:
                 ).cpu()
 
                 tmp_mask = batch_data["re_sbj_attention_mask"].detach().cpu()
-                tmp_start_labels = batch_data["re_sbj_start_labels"].detach(
-                ).cpu()
-                tmp_end_labels = batch_data["re_sbj_end_labels"].detach().cpu()
             else:
                 output = self.model(re_obj_input_ids=batch_data["re_obj_input_ids"],
                                     re_obj_token_type_ids=batch_data["re_obj_token_type_ids"],
                                     re_obj_attention_mask=batch_data["re_obj_attention_mask"],
-                                    re_obj_start_labels=batch_data["re_obj_start_labels"],
-                                    re_obj_end_labels=batch_data["re_obj_end_labels"],
+                                    re_obj_start_labels=None,
+                                    re_obj_end_labels=None,
                                     augment_Ids=batch_data["batch_augment_Ids"],
                                     sim_scores=batch_data["batch_sim_score"]
                                     )
@@ -122,32 +118,24 @@ class EePipeline:
                 ).cpu()
 
                 tmp_mask = batch_data["re_obj_attention_mask"].detach().cpu()
-                tmp_start_labels = batch_data["re_obj_start_labels"].detach(
-                ).cpu()
-                tmp_end_labels = batch_data["re_obj_end_labels"].detach().cpu()
 
-            if start_labels is None:
+            if s_logits is None:
                 s_logits = start_logits
                 e_logits = end_logits
                 masks = tmp_mask
-                start_labels = tmp_start_labels
-                end_labels = tmp_end_labels
             else:
                 s_logits = np.append(s_logits, start_logits, axis=0)
                 e_logits = np.append(e_logits, end_logits, axis=0)
                 masks = np.append(masks, tmp_mask, axis=0)
-                start_labels = np.append(
-                    start_labels, tmp_start_labels, axis=0)
-                end_labels = np.append(end_labels, tmp_end_labels, axis=0)
 
             raw_tokens += batch_data['raw_tokens']
+            argu_tuples += batch_data['argu_tuples']
 
         bj_outputs = {
             "s_logits": s_logits,
             "e_logits": e_logits,
             "masks": masks,
-            "start_labels": start_labels,
-            "end_labels": end_labels,
+            'argu_tuples':argu_tuples,
             'raw_tokens': raw_tokens
         }
 
@@ -250,14 +238,16 @@ class EePipeline:
         role_metric = np.zeros([len(id2label), 4])
         s_logits = outputs["s_logits"]
         e_logits = outputs["e_logits"]
-        s_label = outputs["start_labels"]
-        e_label = outputs["end_labels"]
+        argu_tuples = outputs["argu_tuples"]
         masks = outputs["masks"]
         raw_tokens = outputs["raw_tokens"]
-        for s_logit, e_logit, s_label, e_label, mask, text in zip(s_logits, e_logits, s_label, e_label, masks, raw_tokens):
+        for s_logit, e_logit, argu_tuple, mask, text in zip(s_logits, e_logits, argu_tuples, masks, raw_tokens):
             length = sum(mask)
             pred_entities = bj_decode(s_logit, e_logit, length, id2label)
-            true_entities = bj_decode(s_label, e_label, length, id2label)
+            true_entities = {
+                '答案':argu_tuple
+            }
+
             # print("========================")
             # print(pred_entities)
             # print(true_entities)
@@ -659,9 +649,15 @@ class EePipeline:
 
 if __name__ == '__main__':
 
-    args = EeArgs('obj',log=True,model='roberta',output_name='mergedRole_noLexicon_useDemo_allMatch_len384_bs32')
+    ner_weright = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt'    
+    # args = EeArgs('obj',log=True,model='roberta',use_demo=False,weight_path='checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
+    # model = UIEModel(args)
+    # ee_pipeline = EePipeline(model, args)
+    # ee_pipeline.test()
+    # torch.cuda.empty_cache()
+
+    args = EeArgs('ner',log=True,model='roberta',weight_path=ner_weright)
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
     ee_pipeline.test()
     torch.cuda.empty_cache()
