@@ -21,11 +21,16 @@ model_dict = {
     'macbert': 'model_hub/chinese-macbert-base/',
     'mlmbert': 'checkpoints/ee/mlm_label'
 }
-
+aug_modes = [None,'merge','demo']
+def get_tokenizer(arg):
+    tokenizer = BertTokenizer.from_pretrained(arg.bert_dir)
+    tokenizer.add_special_tokens(
+            {'additional_special_tokens': ["[TGR]", "[DEMO]", "[ARG]"]})
+    return tokenizer
 
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,use_demo=True,weight_path=None):
-        self.tasks = [task]
+    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,aug_mode=None,weight_path=None):
+        self.task = task
         self.data_name = "duee"
         self.data_dir = "ee"
 
@@ -50,10 +55,10 @@ class EeArgs:
 
             if output_name is None:
                 self.save_dir = "./checkpoints/{}/{}_{}_{}_test.pt".format(
-                    self.data_dir, self.tasks[0], self.data_name, model)
+                    self.data_dir, self.task, self.data_name, model)
             else:
                 self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
-                    self.data_dir, self.tasks[0], self.data_name, model, output_name)
+                    self.data_dir, self.task, self.data_name, model, output_name)
 
         self.train_path = "./data/{}/{}/duee_train.json".format(
             self.data_dir, self.data_name)
@@ -79,23 +84,20 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 20
+        self.train_epoch = 30
         self.train_batch_size = 32
-        self.eval_batch_size = 32
-        self.eval_step = 300
+        self.eval_batch_size = 8
+        self.eval_step = 500
         self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
-        self.lr = 3e-5
+        self.lr = 5e-5
         self.other_lr = 3e-4
         self.warmup_proportion = 0.01
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
         # device = torch.device("cpu")
-        self.tokenizer = BertTokenizer.from_pretrained(self.bert_dir)
-        self.tokenizer.add_special_tokens(
-            {'additional_special_tokens': ["[TGR]", "[DEMO]", "[ARG]"]})
         # 下面是lexicon的
         # 完成alphabet构建
         self.use_lexicon = use_lexicon
@@ -116,7 +118,7 @@ class EeArgs:
 
         if log:
             self.logs_save_dir = 'log'
-            logger_init('ee-'+self.tasks[0], log_level=logging.DEBUG,
+            logger_init('ee-'+self.task, log_level=logging.DEBUG,
                         log_dir=self.logs_save_dir,
                         only_file=False)
             logging.info("\n\n\n\n\n########  <----------------------->")
@@ -133,25 +135,21 @@ class EeArgs:
             self.gaz_alphabet_count[1] = 0
             self.init_lexicon()
 
-        if 'obj' in self.tasks:
+        if self.task == 'obj':
             label2role_path = "./data/ee/{}/label2role.json".format(
                 self.data_name)
             with open(label2role_path, "r", encoding="utf-8") as fp:
                 self.label2role = json.load(fp)
-            # 相似度增强
-            self.use_demo = use_demo
-            if use_demo:
-                logging.info('...加载相似度匹配模型:'+self.sim_model)
-                self.sim_scorer = Sim_scorer(self.sim_model)
-                logging.info('...构造提示库embedding')
-                self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
-                    self.demo_path)
-                logging.info('...提示库embedding构造完毕')
-            else:
-                logging.info('...不使用相似样例辅助学习')
-                self.sim_scorer = None
-                self.demo_embs = None
-                self.demo_tuples = None
+                
+        # 相似度计算，用于辅助训练和文本增强
+        self.aug_mode = aug_mode
+        logging.info('...加载相似度匹配模型:'+self.sim_model)
+        self.sim_scorer = Sim_scorer(self.sim_model)
+        logging.info('...构造提示库embedding')
+        self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(self.demo_path,self.task)
+        logging.info('...提示库embedding构造完毕')
+        logging.info('【增强模式】'+str(aug_mode))
+
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)
@@ -209,7 +207,7 @@ class NerArgs:
     data_dir = "ner"
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
     save_dir = "./checkpoints/{}/{}_{}_model.pt".format(
-        data_dir, tasks[0], data_name)
+        data_dir, tasks, data_name)
     train_path = "./data/{}/{}/train.json".format(data_dir, data_name)
     dev_path = "./data/{}/{}/dev.json".format(data_dir, data_name)
     test_path = "./data/{}/{}/test.json".format(data_dir, data_name)
@@ -241,7 +239,7 @@ class ReArgs:
     tasks = ["obj"]
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
     data_name = "ske"
-    save_dir = "./checkpoints/re/{}_{}_model.pt".format(tasks[0], data_name)
+    save_dir = "./checkpoints/re/{}_{}_model.pt".format(tasks, data_name)
     train_path = "./data/re/{}/train.json".format(data_name)
     dev_path = "./data/re/{}/dev.json".format(data_name)
     test_path = "./data/re/{}/dev.json".format(data_name)

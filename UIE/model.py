@@ -3,20 +3,22 @@ import torch.nn as nn
 from transformers import BertConfig, BertModel
 from utils.decode import sigmoid
 from utils.lexicon_functions import compile_lexicon_embeddings
+from config import get_tokenizer
 import numpy as np
 class UIEModel(nn.Module):
     def __init__(self, args):
         super(UIEModel, self).__init__()
         self.args = args
 
-        self.tasks = args.tasks
+        self.task = args.task
         bert_dir = args.bert_dir
         self.bert_config = BertConfig.from_pretrained(bert_dir)
         self.bert_model = BertModel.from_pretrained(bert_dir)
         ### if 添加了新的special_token
         embedding_size = self.bert_model.get_input_embeddings().weight.shape[0]
-        if len(args.tokenizer) > embedding_size:
-            self.bert_model.resize_token_embeddings(len(args.tokenizer))
+        tokenizer = get_tokenizer(args)
+        if len(tokenizer) > embedding_size:
+            self.bert_model.resize_token_embeddings(len(tokenizer))
         ### 用于词典增强
         if self.args.use_lexicon:
             self.gaz_embedding = nn.Embedding(
@@ -36,7 +38,7 @@ class UIEModel(nn.Module):
         else:
             hidden_dim = self.bert_config.hidden_size
 
-        if "ner" in args.tasks:
+        if "ner" == args.task:
             self.ner_num_labels = args.ner_num_labels
             self.module_start_list = nn.ModuleList()
             self.module_end_list = nn.ModuleList()
@@ -49,13 +51,13 @@ class UIEModel(nn.Module):
                 
             self.ner_criterion = nn.BCEWithLogitsLoss()
 
-        if "sbj" in args.tasks:
+        if "sbj" == args.task:
             self.re_sbj_start_fc = nn.Linear(hidden_dim, 1)
             self.re_sbj_end_fc = nn.Linear(hidden_dim, 1)
-        if "obj" in args.tasks:
+        if "obj" == args.task:
             self.re_obj_start_fc = nn.Linear(hidden_dim, 1)
             self.re_obj_end_fc = nn.Linear(hidden_dim, 1)
-        if "rel" in args.tasks:
+        if "rel" == args.task:
             self.re_num_labels = args.re_num_labels
             self.re_rel_fc = nn.Linear(hidden_dim, self.re_num_labels)
 
@@ -355,7 +357,7 @@ class UIEModel(nn.Module):
             "event_output": None
         }
 
-        if "ner" in self.tasks:
+        if "ner" == self.task:
             ner_output = self.ner_forward(
                 ner_input_ids,
                 ner_token_type_ids,
@@ -366,7 +368,7 @@ class UIEModel(nn.Module):
             )
             res["ner_output"] = ner_output
 
-        elif "sbj" in self.tasks:
+        elif "sbj" == self.task:
             re_output = self.re_sbj_forward(
                 re_sbj_input_ids=re_sbj_input_ids,
                 re_sbj_token_type_ids=re_sbj_token_type_ids,
@@ -376,7 +378,7 @@ class UIEModel(nn.Module):
             )
             res["re_output"] = re_output
 
-        elif "obj" in self.tasks:
+        elif "obj" == self.task:
             re_output = self.re_obj_forward(
                 re_obj_input_ids=re_obj_input_ids,
                 re_obj_token_type_ids=re_obj_token_type_ids,
@@ -388,7 +390,7 @@ class UIEModel(nn.Module):
             )
             res["re_output"] = re_output
 
-        elif "rel" in self.tasks:
+        elif "rel" == self.task:
             re_output = self.re_rel_forward(
                 re_rel_input_ids=re_rel_input_ids,
                 re_rel_token_type_ids=re_rel_token_type_ids,

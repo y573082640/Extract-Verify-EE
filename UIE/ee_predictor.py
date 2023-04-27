@@ -10,14 +10,25 @@ import torch
 from transformers import BertTokenizer
 from UIE.ee_main import EePipeline
 from UIE.model import UIEModel
-from UIE.config import EeArgs
+from UIE.config import EeArgs,get_tokenizer
 import logging
 from time import time
 from torch.utils.data import DataLoader, RandomSampler
 from UIE.ee_data_loader import EeDataset, EeCollate
 from utils.question_maker import get_question_for_verify
 from UIE.ee_postprocessing import remove_duplicates
+from torch.utils.data import DataLoader, Dataset
 
+class VerifyDataset(Dataset):
+    def __init__(self, data_list):
+        self.data = data_list
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+    
 def chunks(lst, n):
     # Yield successive n-sized chunks from lst.
     for i in tqdm.tqdm(range(0, len(lst), n)):
@@ -171,7 +182,15 @@ class Predictor:
                             device=0, top_k=1)
 
         results = []
-        for batch_data in chunks(datas, batch_size):
+        infer_data = VerifyDataset(datas)
+        data_loader = DataLoader(
+            dataset=infer_data,
+            batch_size=batch_size,
+            num_workers=3,
+            shuffle=False
+        )
+
+        for batch_data in tqdm.tqdm(data_loader):
             result = unmasker(batch_data, targets=['不', '是'])
             # append the result to the list
             results.extend(result)
@@ -224,8 +243,8 @@ class Predictor:
 
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt')
-    obj_args = EeArgs('obj', use_demo=False, log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
+    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_test_merge_evt.pt')
+    obj_args = EeArgs('obj', log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
     predict_tool = Predictor(ner_args, obj_args)
     t_path = 'data/ee/duee/duee_test2_toy.json'
     output_path = name_with_date('output')

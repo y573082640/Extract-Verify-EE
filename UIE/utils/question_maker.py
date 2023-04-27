@@ -13,11 +13,11 @@ argument2question_path = 'data/ee/duee/argument2question.json'
 with open(argument2question_path, 'r') as fp:
     argument2question = json.load(fp)
 
-def create_role_tuple(event):
+def create_role_tuple(data):
     tuples = []
     concat_texts = []
-    text = event["text"]
-    event_list = event["event_list"]    
+    text = data["text"]
+    event_list = data["event_list"]    
     for tgr_idx, event in enumerate(event_list):
         event_type = event["event_type"]
         trigger = event["trigger"]
@@ -39,7 +39,7 @@ def create_role_tuple(event):
                 'question': question,
                 'trigger_start_index': event["trigger_start_index"],
                 'arguments': arguments,
-                'role': argument["role"],
+                'role': role,
                 'event_type': event["event_type"]
             })
     return tuples,concat_texts
@@ -254,30 +254,56 @@ class Sim_scorer:
 
         return sentence_embeddings.cpu()
 
-    def create_embs_and_tuples(self, filename=None):
+    def create_embs_and_tuples(self, filename=None , task='obj'):
         concat_texts = []
         embs = []
         tuples = []
         # 用于训练
-        with open(filename, encoding='utf-8') as f:
-            f = f.read().strip().split("\n")
-            for evt_idx, line in enumerate(f):
-                evt = json.loads(line)
-                text = evt["text"]
-                if len(text) == 0:
-                    continue
-                batch_tuples,batch_concat_texts = create_role_tuple(evt)
-                concat_texts += batch_concat_texts
-                tuples += batch_tuples
+        if task == 'obj':
+            with open(filename, encoding='utf-8') as f:
+                f = f.read().strip().split("\n")
+                for evt_idx, line in enumerate(f):
+                    evt = json.loads(line)
+                    text = evt["text"]
+                    if len(text) == 0:
+                        continue
+                    batch_tuples,batch_concat_texts = create_role_tuple(evt)
+                    concat_texts += batch_concat_texts
+                    tuples += batch_tuples
 
-        embs = self._batch_encode(batch_size=32, dataset=concat_texts)
+            embs = self._batch_encode(batch_size=32, dataset=concat_texts)
+        elif task == 'ner':
+            with open(filename, encoding='utf-8') as f:
+                f = f.read().strip().split("\n")
+                for evt_idx, line in enumerate(f):
+                    evt = json.loads(line)
+                    text = evt["text"]
+                    if len(text) == 0:
+                        continue
+
+                    cnt = len(evt["event_list"])
+                    key_for_embs = "事件数量为{},文本长度为{},包含事件:".format(cnt,len(text))
+                    for e in evt["event_list"]:
+                        key_for_embs += e['event_type'] + '-' + e['trigger'] + ","
+                        del e['arguments']
+                    concat_texts.append(key_for_embs)
+
+                    tuples.append(evt)
+            embs = self._batch_encode(batch_size=32, dataset=concat_texts)
+        else:
+            raise AttributeError('【create_embs_and_tuples】')
         return embs, tuples
 
-    def sim_match(self, text_embs, demo_embs, rank=1):
-        most_sim = util.semantic_search(text_embs, demo_embs, top_k=2)
+    def sim_match(self, text_embs, demo_embs, rank_jump=1):
+        most_sim = util.semantic_search(text_embs, demo_embs, top_k=4)
         ret = []
-        for top2_list in most_sim:
-            ret.append(top2_list[rank])
+        for top_list in most_sim:
+            tmp = []
+            for i in range(len(top_list)):
+                if i == rank_jump:
+                    continue
+                tmp.append(top_list[i]["corpus_id"])
+            ret.append(tmp)
         return ret
 
 
