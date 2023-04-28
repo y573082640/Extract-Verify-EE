@@ -1,6 +1,13 @@
 import torch
 from transformers import BertTokenizer
-from utils.lexicon_functions import build_alphabet, build_gaz_alphabet, build_gaz_file, build_gaz_pretrain_emb, build_biword_pretrain_emb, build_word_pretrain_emb
+from utils.lexicon_functions import (
+    build_alphabet,
+    build_gaz_alphabet,
+    build_gaz_file,
+    build_gaz_pretrain_emb,
+    build_biword_pretrain_emb,
+    build_word_pretrain_emb,
+)
 from utils.alphabet import Alphabet
 from utils.gazetteer import Gazetteer
 from utils.logging import logger_init
@@ -9,72 +16,100 @@ import logging
 import os
 import numpy as np
 import json
+
 gaz_dict = {
     50: "./data/embs/ctb.50d.vec",
     100: "./data/embs/tencent-d100/tencent-ailab-embedding-zh-d100-v0.2.0-s.txt",
-    200: "./data/embs/tencent-d200/tencent-ailab-embedding-zh-d200-v0.2.0-s.txt"
+    200: "./data/embs/tencent-d200/tencent-ailab-embedding-zh-d200-v0.2.0-s.txt",
 }
 
 model_dict = {
-    'bert': 'model_hub/chinese-bert-wwm-ext/',
-    'roberta': 'model_hub/chinese-roberta-wwm-ext/',
-    'macbert': 'model_hub/chinese-macbert-base/',
-    'mlmbert': 'checkpoints/ee/mlm_label'
+    "bert": "model_hub/chinese-bert-wwm-ext/",
+    "roberta": "model_hub/chinese-roberta-wwm-ext/",
+    "macbert": "model_hub/chinese-macbert-base/",
+    "mlmbert": "checkpoints/ee/mlm_label",
 }
-aug_modes = [None,'merge','demo']
+aug_modes = [None, "merge", "demo"]
+
+
 def get_tokenizer(arg):
     tokenizer = BertTokenizer.from_pretrained(arg.bert_dir)
     tokenizer.add_special_tokens(
-            {'additional_special_tokens': ["[TGR]", "[DEMO]", "[ARG]"]})
+        {"additional_special_tokens": ["[TGR]", "[DEMO]", "[ARG]"]}
+    )
     return tokenizer
 
+
 class EeArgs:
-    def __init__(self, task, use_lexicon=False, gaz_dim=50, log=True, model='bert', output_name=None,aug_mode=None,weight_path=None):
+    def __init__(
+        self,
+        task,
+        use_lexicon=False,
+        gaz_dim=50,
+        log=True,
+        model="bert",
+        output_name=None,
+        aug_mode=None,
+        weight_path=None,
+    ):
         self.task = task
         self.data_name = "duee"
         self.data_dir = "ee"
 
         if weight_path is not None:
             self.save_dir = weight_path
-            if 'roberta' in weight_path:
-                self.bert_dir = model_dict['roberta']
-            elif 'mlmbert' in weight_path:
-                self.bert_dir = model_dict['mlmbert']
-            elif 'macbert' in weight_path:
-                self.bert_dir = model_dict['macbert']
+            if "roberta" in weight_path:
+                self.bert_dir = model_dict["roberta"]
+            elif "mlmbert" in weight_path:
+                self.bert_dir = model_dict["mlmbert"]
+            elif "macbert" in weight_path:
+                self.bert_dir = model_dict["macbert"]
             else:
-                self.bert_dir = model_dict['bert']
-            print('[推理模式] 加载模型{}'.format(self.bert_dir))
+                self.bert_dir = model_dict["bert"]
+            print("[推理模式] 加载模型{}".format(self.bert_dir))
 
         else:
             if model in model_dict:
                 self.bert_dir = model_dict[model]
             else:
-                self.bert_dir = model_dict['bert']
-                print('[警告] 模型{}不存在,自动加载chinese-bert-wwm-ext'.format(model))
+                self.bert_dir = model_dict["bert"]
+                print("[警告] 模型{}不存在,自动加载chinese-bert-wwm-ext".format(model))
 
             if output_name is None:
-                self.save_dir = "./checkpoints/{}/{}_{}_{}_test.pt".format(
-                    self.data_dir, self.task, self.data_name, model)
+                self.save_dir = "./checkpoints/{}/{}_{}_{}_{}_default.pt".format(
+                    self.data_dir, self.task, self.data_name, model , aug_mode, 
+                )
             else:
-                self.save_dir = "./checkpoints/{}/{}_{}_{}_{}.pt".format(
-                    self.data_dir, self.task, self.data_name, model, output_name)
+                self.save_dir = "./checkpoints/{}/{}_{}_{}_{}_{}.pt".format(
+                    self.data_dir, self.task, self.data_name, model, aug_mode, output_name
+                )
 
         self.train_path = "./data/{}/{}/duee_train.json".format(
-            self.data_dir, self.data_name)
+            self.data_dir, self.data_name
+        )
         self.dev_path = "./data/{}/{}/duee_dev.json".format(
-            self.data_dir, self.data_name)
+            self.data_dir, self.data_name
+        )
         self.test_path = "./data/{}/{}/duee_dev.json".format(
-            self.data_dir, self.data_name)
+            self.data_dir, self.data_name
+        )
         self.infer_path = "./data/{}/{}/duee_dev.json".format(
-            self.data_dir, self.data_name)
+            self.data_dir, self.data_name
+        )
         self.label_path = "./data/{}/{}/labels.txt".format(
-            self.data_dir, self.data_name)
+            self.data_dir, self.data_name
+        )
         self.demo_path = "./data/{}/{}/duee_train.json".format(
-            self.data_dir, self.data_name)
-        self.sim_model = 'model_hub/paraphrase-MiniLM-L6-v2'
-        self.ignore_key = ['argu_roles', 'raw_tokens','argu_tuples',
-                           'batch_augment_Ids', 'text_ids']
+            self.data_dir, self.data_name
+        )
+        self.sim_model = "model_hub/paraphrase-MiniLM-L6-v2"
+        self.ignore_key = [
+            "argu_roles",
+            "raw_tokens",
+            "argu_tuples",
+            "batch_augment_Ids",
+            "text_ids",
+        ]
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
         self.ent_label2id = {}
@@ -84,19 +119,18 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 30
+        self.train_epoch = 20
         self.train_batch_size = 32
         self.eval_batch_size = 8
-        self.eval_step = 500
+        self.eval_step = 300
         self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 5.0
-        self.lr = 5e-5
+        self.lr = 3e-5
         self.other_lr = 3e-4
         self.warmup_proportion = 0.01
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # device = torch.device("cpu")
         # 下面是lexicon的
         # 完成alphabet构建
@@ -117,47 +151,61 @@ class EeArgs:
         self.gaz_file = gaz_dict.get(gaz_dim, 50)
 
         if log:
-            self.logs_save_dir = 'log'
-            logger_init('ee-'+self.task, log_level=logging.DEBUG,
-                        log_dir=self.logs_save_dir,
-                        only_file=False)
+            self.logs_save_dir = "log"
+            logger_init(
+                "ee-" + self.task,
+                log_level=logging.DEBUG,
+                log_dir=self.logs_save_dir,
+                only_file=False,
+            )
             logging.info("\n\n\n\n\n########  <----------------------->")
             for key, value in self.__dict__.items():
                 logging.info(f"########  {key} = {value}")
 
         if self.use_lexicon:
-            self.word_alphabet = Alphabet('word')  # 单字
-            self.biword_alphabet = Alphabet('biword')  # 双字
-            self.pos_alphabet = Alphabet('pos')  # 双字
+            self.word_alphabet = Alphabet("word")  # 单字
+            self.biword_alphabet = Alphabet("biword")  # 双字
+            self.pos_alphabet = Alphabet("pos")  # 双字
             self.gaz = Gazetteer(self.gaz_lower)
-            self.gaz_alphabet = Alphabet('gaz')
+            self.gaz_alphabet = Alphabet("gaz")
             self.gaz_alphabet_count = {}
             self.gaz_alphabet_count[1] = 0
             self.init_lexicon()
 
-        if self.task == 'obj':
-            label2role_path = "./data/ee/{}/label2role.json".format(
-                self.data_name)
+        if self.task == "obj":
+            label2role_path = "./data/ee/{}/label2role.json".format(self.data_name)
             with open(label2role_path, "r", encoding="utf-8") as fp:
                 self.label2role = json.load(fp)
-                
+
         # 相似度计算，用于辅助训练和文本增强
         self.aug_mode = aug_mode
-        logging.info('...加载相似度匹配模型:'+self.sim_model)
+        logging.info("...加载相似度匹配模型:" + self.sim_model)
         self.sim_scorer = Sim_scorer(self.sim_model)
-        logging.info('...构造提示库embedding')
-        self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(self.demo_path,self.task)
-        logging.info('...提示库embedding构造完毕')
-        logging.info('【增强模式】'+str(aug_mode))
-
+        logging.info("...构造提示库embedding")
+        self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
+            self.demo_path, self.task
+        )
+        logging.info("...提示库embedding构造完毕")
+        logging.info("【增强模式】" + str(aug_mode))
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)
-        for filename in [self.train_path, self.dev_path, self.test_path, self.infer_path]:
-            build_alphabet(filename, self.word_alphabet,
-                           self.biword_alphabet, self.pos_alphabet)
-            build_gaz_alphabet(filename, self.gaz, self.gaz_alphabet,
-                               self.gaz_alphabet_count, count=self.use_count)
+        for filename in [
+            self.train_path,
+            self.dev_path,
+            self.test_path,
+            self.infer_path,
+        ]:
+            build_alphabet(
+                filename, self.word_alphabet, self.biword_alphabet, self.pos_alphabet
+            )
+            build_gaz_alphabet(
+                filename,
+                self.gaz,
+                self.gaz_alphabet,
+                self.gaz_alphabet_count,
+                count=self.use_count,
+            )
 
         # 停止自动增长
         self.word_alphabet.keep_growing = False
@@ -167,11 +215,17 @@ class EeArgs:
         print("-词典和字母表构建完毕-")
 
         self.pretrain_gaz_embedding, self.gaz_emb_dim = build_gaz_pretrain_emb(
-            self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb)
+            self.gaz_file, self.gaz_alphabet, self.gaz_emb_dim, self.norm_gaz_emb
+        )
         self.pretrain_word_embedding, self.word_emb_dim = build_word_pretrain_emb(
-            self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb)
+            self.char_emb, self.word_alphabet, self.word_emb_dim, self.norm_word_emb
+        )
         self.pretrain_biword_embedding, self.biword_emb_dim = build_biword_pretrain_emb(
-            self.bichar_emb, self.biword_alphabet, self.biword_emb_dim, self.norm_biword_emb)
+            self.bichar_emb,
+            self.biword_alphabet,
+            self.biword_emb_dim,
+            self.norm_biword_emb,
+        )
 
         # if os.path.exists('./storage/word_embedding.npy'):
         #     self.pretrain_word_embedding = np.load(
@@ -206,8 +260,7 @@ class NerArgs:
     data_name = "cner"
     data_dir = "ner"
     bert_dir = "model_hub/chinese-bert-wwm-ext/"
-    save_dir = "./checkpoints/{}/{}_{}_model.pt".format(
-        data_dir, tasks, data_name)
+    save_dir = "./checkpoints/{}/{}_{}_model.pt".format(data_dir, tasks, data_name)
     train_path = "./data/{}/{}/train.json".format(data_dir, data_name)
     dev_path = "./data/{}/{}/dev.json".format(data_dir, data_name)
     test_path = "./data/{}/{}/test.json".format(data_dir, data_name)
@@ -255,7 +308,7 @@ class ReArgs:
         ent_label2id[label] = i
         ent_id2label[i] = label
 
-    with open(relation_label_path, "r", encoding='utf-8') as fp:
+    with open(relation_label_path, "r", encoding="utf-8") as fp:
         relation_label = fp.read().strip().split("\n")
     relation_label.append("没有关系")
 

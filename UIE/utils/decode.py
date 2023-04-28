@@ -1,10 +1,10 @@
 import numpy as np
 from collections import defaultdict
 import multiprocessing
-
+import logging
 def sigmoid(x):
+    ## 将实数映射到(0,1)，记住sigmoid(0) = 0.5
     return 1 / (1 + np.exp(-x))
-
 
 def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
     ret = []
@@ -12,7 +12,6 @@ def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
         predict_entities = ner_decode(s_logit, e_logit, text, ent_id2label)
         ret.append(predict_entities)
     return ret
-
 
 def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids, roles):
     ret = []
@@ -89,6 +88,7 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
             for j, e_type in enumerate(end_pred[i:]):
                 if s_type == e_type:
                     tmp_ent = raw_text[i:i + j + 1]
+                    logging.debug(tmp_ent)
                     if tmp_ent == '':
                         continue
                     predict_entities[id2label[label_id]].append((tmp_ent, i))
@@ -102,29 +102,42 @@ def ner_decode2(start_logits, end_logits, length, id2label):
     确定有哪些事件类型，用于训练
     """
     predict_entities = {x: [] for x in list(id2label.values())}
-    # predict_entities = defaultdict(list)
-    # print(start_pred)
-    # print(end_pred)
-
+    
     for label_id in range(len(id2label)):
         start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
         end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
-        # print(start_logit)
-        # print(end_logit)
-        # print("="*100)
         start_pred = start_logit
         end_pred = end_logit
-
         for i, s_type in enumerate(start_pred):
             if s_type == 0:
                 continue
             for j, e_type in enumerate(end_pred[i:]):
-                if s_type == e_type:
+                if s_type == e_type:                    
                     predict_entities[id2label[label_id]].append((i, i+j+1))
                     # TODO:找到距离自己最近的结束符号就停止了，考虑贪心匹配？
                     break
     return predict_entities
 
+def ner_decode_label(start_labels, end_labels, length, id2label):
+    """
+    确定有哪些事件类型，用于训练
+    """
+    predict_entities = {x: [] for x in list(id2label.values())}
+    # predict_entities = defaultdict(list)
+    # print(start_pred)
+    # print(end_pred)
+    
+    for label_id in range(len(id2label)):
+        start_logit = start_labels[label_id]
+        end_logit = end_labels[label_id]
+        for i, s_type in enumerate(start_logit):
+            if s_type == 0:
+                continue
+            for j, e_type in enumerate(end_logit[i:]):
+                if s_type == e_type:                    
+                    predict_entities[id2label[label_id]].append((i, i+j+1))
+                    break
+    return predict_entities
 
 def bj_decode(start_logits, end_logits, length, id2label):
     ## id2label = {0:'答案'}
@@ -142,7 +155,6 @@ def bj_decode(start_logits, end_logits, length, id2label):
                 break
 
     return predict_entities
-
 
 def depart_ner_output_batch(output, batch_data, ner_s_logits, ner_e_logits, raw_tokens):
     # (num_labels,batch_size,max_len)

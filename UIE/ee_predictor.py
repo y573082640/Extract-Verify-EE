@@ -241,12 +241,15 @@ class Predictor:
         logging.info('推理完成，总计用时%.5f秒' % (ed-st))
         return
 
+check_base = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/'
+ner_path = check_base + 'ner_duee_roberta_no_lexicon_len256_bs32.pt'
+obj_path = check_base + 'obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt'
 
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_test_merge_evt.pt')
-    obj_args = EeArgs('obj', log=False, weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt')
+    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path=ner_path)
+    obj_args = EeArgs('obj', log=False, weight_path=obj_path)
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = 'data/ee/duee/duee_test2_toy.json'
+    t_path = 'data/ee/duee/duee_dev.json'
     output_path = name_with_date('output')
     predict_tool.joint_predict(t_path, output_path)
 

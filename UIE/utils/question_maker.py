@@ -13,6 +13,12 @@ argument2question_path = 'data/ee/duee/argument2question.json'
 with open(argument2question_path, 'r') as fp:
     argument2question = json.load(fp)
 
+def apply_label_smoothing(label_list, factor=0.1):
+    smoothed_labels = np.full((len(label_list), ), factor / (len(label_list) - 1))
+    true_label_indices = np.nonzero(label_list)[0]
+    smoothed_labels[true_label_indices] = 1 - factor
+    return smoothed_labels.tolist()
+
 def create_role_tuple(data):
     tuples = []
     concat_texts = []
@@ -32,7 +38,7 @@ def create_role_tuple(data):
         for role, arguments in role_dict.items():
             question = get_question_for_argument(
                 event_type=event_type, role=role)
-            concat_texts.append("事件类型是%s,%s,事件触发词是%s,文本长度是%d" % (event_type, question, trigger, len(text)))
+            concat_texts.append("事件类型是%s,%s,事件触发词是%s,文本复杂度为%d" % (event_type, question, trigger, len(text)//50+len(event_list)))
             tuples.append({
                 'text': text,
                 'trigger': trigger,
@@ -294,14 +300,14 @@ class Sim_scorer:
             raise AttributeError('【create_embs_and_tuples】')
         return embs, tuples
 
-    def sim_match(self, text_embs, demo_embs, rank_jump=1):
+    def sim_match(self, text_embs, demo_embs, ignore_first=False):
         most_sim = util.semantic_search(text_embs, demo_embs, top_k=4)
         ret = []
         for top_list in most_sim:
             tmp = []
+            if ignore_first:
+                top_list = top_list[1:]
             for i in range(len(top_list)):
-                if i == rank_jump:
-                    continue
                 tmp.append(top_list[i]["corpus_id"])
             ret.append(tmp)
         return ret

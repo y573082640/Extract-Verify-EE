@@ -19,6 +19,7 @@ from utils.lexicon_functions import (
     batchify_augment_ids,
 )
 
+
 import os
 
 NULLKEY = "-null-"
@@ -101,13 +102,13 @@ class EeDataset(ListDataset):
         if self.test:
             mode = None
         else:
-            mode=self.args.aug_mode
+            mode = self.args.aug_mode
 
         if "obj" == self.args.task:  ## 如果采用辅助学习增强策略
             data = self.convert_argu_data(data, mode)
         elif "ner" == self.args.task:  ## 如果采用拼接增强策略
             data = self.convert_evt_data(data, mode)
-            
+
         return data
 
     def convert_argu_data(self, role_tuple, mode=None):
@@ -127,11 +128,11 @@ class EeDataset(ListDataset):
             demo = None
 
         if mode == "merge":
-            random_number = random.choice([1, 2, 3])
-            if random_number == 1:  ## 随机选取事件拼接
+            random_number = random.choice([1, 2, 3, 4])
+            if random_number == 3:  ## 随机选取事件拼接
                 role_aug = random.choice(self.data)
                 role_tuple = merge_argu(role_tuple, role_aug)
-            elif random_number == 2:  ## 选择相似事件
+            elif random_number == 4:  ## 选择相似事件
                 role_aug = self.args.demo_tuples[sim_id]
                 role_tuple = merge_argu(role_tuple, role_aug)
             else:  ## 什么都不做
@@ -176,19 +177,14 @@ class EeDataset(ListDataset):
         ent_label2id = {label: i for i, label in enumerate(entity_label)}
 
         if mode == "merge":
-            random_number = random.choice([1, 4, 5, 6])
+            random_number = random.choice([1, 2, 3, 4])
             # logging.debug(random_number)
-            if random_number == 4:  ## 随机选取事件拼接
+            if random_number == 3:  ## 随机选取事件拼接
                 evt_aug = random.choice(self.data)
                 evt = merge_evt(evt_origin=evt, evt_aug=evt_aug)
-            elif random_number == 5:  ## 选择相似事件
+            elif random_number == 4:  ## 选择相似事件
                 evt_aug = self.args.demo_tuples[sim_id]
                 evt = merge_evt(evt_origin=evt, evt_aug=evt_aug)
-            elif random_number == 6:  ## 随机选取事件和相似事件拼接
-                evt_aug1 = random.choice(self.data)
-                evt_aug2 = self.args.demo_tuples[sim_id]
-                evt = merge_evt(evt_origin=evt, evt_aug=evt_aug1)
-                evt = merge_evt(evt_origin=evt, evt_aug=evt_aug2)
 
         text = evt["text"]
         event_list = evt["event_list"]
@@ -251,8 +247,9 @@ class EeDataset(ListDataset):
         embs, data_list = sim_scorer.create_embs_and_tuples(filename, self.args.task)
         logging.info("文本embedding构造完毕")
         # 此处用训练集作为demo库
+        ignore_first = True if filename == self.args.demo_path else False
         most_sim = sim_scorer.sim_match(
-            embs, self.args.demo_embs, rank_jump=0 if filename == self.args.demo_path else 1
+            embs, self.args.demo_embs, ignore_first
         )  # {corpus_id,score}
         logging.info("相似度匹配完成")
         for idx, data in enumerate(data_list):

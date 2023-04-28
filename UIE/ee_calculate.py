@@ -17,6 +17,25 @@ def check_length(path):
     print(cnt, total)
     print(cnt/total)
 
+def check_length_of_trigger(path):
+    cnt = 0
+    total = 0
+    with open(path) as f:
+        for line in f:
+            event = json.loads(line.strip())
+            text = event['text']
+            for e in event["event_list"]:
+                t_len = len(e['trigger'])
+                total += 1
+                if t_len == 1:
+                    cnt += 1
+                    # print("文本:%s" % text)
+                    # print("长度:%d" %len(text))
+                    # print('----------------------------')
+
+    print(cnt, total)
+    print(cnt/total)
+
 def check_repeat(path):
     cnt = 0
     total = 0
@@ -73,9 +92,9 @@ def check_dump(path):
 
 # 新建一个字典，用于存放每个role对应的最短参数
 if __name__ == "__main__":
-    path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/output 2023-04-25 10:05:40.json'
+    path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_dev.json'
     # path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/verified_result 2023-04-25 11:18:06.json'
-    check_dump(path)
+    check_length_of_trigger(path)
 
     ## 6613 69952
     ## 0.09453625343092406

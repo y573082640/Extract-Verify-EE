@@ -4,8 +4,10 @@ sys.path.append("..")
 import tqdm
 import logging
 import time
+from datetime import datetime
 import numpy as np
 import torch
+import pandas as pd
 from torch.utils.data import DataLoader, RandomSampler
 from sklearn.metrics import classification_report as cr
 from transformers import AdamW, get_linear_schedule_with_warmup
@@ -17,6 +19,7 @@ from UIE.utils.decode import (
     ner_decode_batch,
     ner_decode2,
     bj_decode,
+    ner_decode_label,
     obj_decode_batch,
     depart_ner_output_batch,
 )
@@ -116,8 +119,9 @@ class EePipeline:
         raw_tokens = []
         argu_tuples = []
         masks = None
+        loss = 0
         self.model.eval()
-        print('...测试中')
+        print("...测试中")
         for batch_data in tqdm.tqdm(data_loader):
             for key in batch_data.keys():
                 if key not in self.args.ignore_key:
@@ -141,8 +145,8 @@ class EePipeline:
                     re_obj_input_ids=batch_data["re_obj_input_ids"],
                     re_obj_token_type_ids=batch_data["re_obj_token_type_ids"],
                     re_obj_attention_mask=batch_data["re_obj_attention_mask"],
-                    re_obj_start_labels=None,
-                    re_obj_end_labels=None,
+                    re_obj_start_labels=batch_data["re_obj_start_labels"],
+                    re_obj_end_labels=batch_data["re_obj_end_labels"],
                     augment_Ids=batch_data["batch_augment_Ids"],
                     sim_scores=batch_data["batch_sim_score"],
                 )
@@ -159,7 +163,7 @@ class EePipeline:
                 s_logits = np.append(s_logits, start_logits, axis=0)
                 e_logits = np.append(e_logits, end_logits, axis=0)
                 masks = np.append(masks, tmp_mask, axis=0)
-
+            loss += output["re_output"]["obj_loss"].item()
             raw_tokens += batch_data["raw_tokens"]
             argu_tuples += batch_data["argu_tuples"]
 
@@ -177,7 +181,7 @@ class EePipeline:
             bj_outputs, label=label, id2label=id2label, return_report=return_report
         )
         metrics["bj_metrics"] = metrics
-
+        metrics["loss"] = loss
         return metrics
 
     def eval_forward(self, data_loader, label, id2label, return_report=False):
@@ -186,8 +190,9 @@ class EePipeline:
         ner_masks = None
         ner_start_labels = None
         ner_end_labels = None
+        loss = 0
         self.model.eval()
-        print('...测试中')
+        print("...测试中")
         for batch_data in tqdm.tqdm(data_loader):
             for key in batch_data.keys():
                 if key not in self.args.ignore_key:
@@ -216,6 +221,7 @@ class EePipeline:
                 )
                 ner_end_labels = np.append(ner_end_labels, tmp_ner_end_labels, axis=0)
 
+            loss += output["ner_output"]["ner_loss"].item()
             ner_s_logits, ner_e_logits, raw_tokens = depart_ner_output_batch(
                 output, batch_data, ner_s_logits, ner_e_logits, raw_tokens
             )
@@ -234,9 +240,8 @@ class EePipeline:
         ner_metrics = self.get_ner_metrics(
             ner_outputs, label, id2label, return_report=return_report
         )
-
         metrics["ner_metrics"] = ner_metrics
-
+        metrics["loss"] = loss
         return metrics
 
     def get_bj_metrics(self, bj_outputs, label, id2label, return_report=False):
@@ -350,17 +355,21 @@ class EePipeline:
         ):
             length = sum(mask)
             # input = (label_num, max_len)
+            # output = {label:predict_index}
+            true_entities = ner_decode_label(
+                s_label, e_label, length, self.args.ent_id2label
+            )
             pred_entities = ner_decode2(
                 s_logit, e_logit, length, self.args.ent_id2label
             )
-            # output = {label:predict_index}
-            true_entities = ner_decode2(
-                s_label, e_label, length, self.args.ent_id2label
-            )
-            # print("========================")
-            # print(pred_entities)
-            # print(true_entities)
-            # print("========================")
+            # logging.debug("========================")
+            # logging.debug(s_logit)
+            # logging.debug(e_logit)
+            # logging.debug(pred_entities)
+            # logging.debug(true_entities)
+            # logging.debug(s_label)
+            # logging.debug(e_label)
+            # logging.debug("========================")
             # if return_report:
             #     if str(pred_entities) != str(true_entities):
             #         logging.debug("<========================>")
@@ -392,10 +401,7 @@ class EePipeline:
         return role_metric, total_count
 
     def train(self, dev=True):
-        train_dataset = EeDataset(
-            file_path=self.args.train_path,
-            args=self.args
-        )
+        train_dataset = EeDataset(file_path=self.args.train_path, args=self.args)
         collate = EeCollate(
             max_len=self.args.max_seq_len,
             task=self.args.task,
@@ -411,11 +417,14 @@ class EePipeline:
         )
         dev_loader = None
         dev_callback = None
+        ### 保存loss和f1
+        train_df = pd.DataFrame(
+            columns=["step", "train loss", "eval loss", "precision", "recall"]
+        )
+        ###
         if dev:
             dev_dataset = EeDataset(
-                file_path=self.args.dev_path,
-                args=self.args,
-                test=True
+                file_path=self.args.dev_path, args=self.args, test=True
             )
             dev_dataset = dev_dataset
             dev_loader = DataLoader(
@@ -436,6 +445,7 @@ class EePipeline:
         best_f1 = 0.0
         for epoch in range(1, self.args.train_epoch + 1):
             for batch_data in tqdm.tqdm((train_loader)):
+                train_loss = 0
                 self.model.train()
                 for key in batch_data.keys():
                     if key not in self.args.ignore_key:
@@ -465,6 +475,7 @@ class EePipeline:
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(), self.args.max_grad_norm
                 )
+                train_loss += loss.item() # 统计每次的loss
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
@@ -476,34 +487,54 @@ class EePipeline:
                 )
                 if dev and global_step % eval_step == 0:
                     if "ner" == self.args.task:
-                        metrics = self.eval_forward(
+                        ret = self.eval_forward(
                             dev_loader, self.args.entity_label, self.args.ent_id2label
                         )
-                        metrics = metrics["ner_metrics"]
+                        eval_loss = ret["loss"]
+                        metrics = ret["ner_metrics"]
 
                     elif "obj" == self.args.task:
                         label = ["答案"]
                         id2label = {0: "答案"}
-                        metrics = self.bj_eval_forward(dev_loader, label, id2label)
-                        metrics = metrics["bj_metrics"]
+                        ret = self.bj_eval_forward(dev_loader, label, id2label)
+                        eval_loss = ret["loss"]
+                        metrics = ret["bj_metrics"]
 
-                    output_info = (
-                        "【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f}".format(
-                            metrics["precision"], metrics["recall"], metrics["f1"]
-                        )
+                    output_info = "【eval】 precision={:.4f} recall={:.4f} f1_score={:.4f} train_loss={:.4f} eval_loss={:.4f}".format(
+                        metrics["precision"],
+                        metrics["recall"],
+                        metrics["f1"],
+                        train_loss,
+                        eval_loss,
                     )
                     logging.info(output_info)
                     print(output_info)
+                    ### 保存loss和f1
+                    train_result = {
+                        "step": global_step,
+                        "train loss": train_loss,
+                        "eval loss": eval_loss,
+                        "precision": metrics["precision"],
+                        "recall": metrics["recall"],
+                    }
+                    train_df = train_df.append(train_result, ignore_index=True)
+                    train_loss = 0
+                    ###
                     if metrics["f1"] > best_f1:
                         best_f1 = metrics["f1"]
                         print("【best_f1】：{}".format(best_f1))
+                        logging.info("【best_f1】：{}".format(best_f1))
                         self.save_model()
+
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        train_result.to_csv(
+            f"/log/train_log/train_loss_{current_time}.csv",
+            index=False,
+        )
 
     def test(self):
         test_dataset = EeDataset(
-            file_path=self.args.test_path,
-            args=self.args,
-            test=True
+            file_path=self.args.test_path, args=self.args, test=True
         )
         collate = EeCollate(
             max_len=self.args.max_seq_len,
@@ -544,6 +575,8 @@ class EePipeline:
                     metrics["precision"], metrics["recall"], metrics["f1"]
                 )
             )
+            print(output_info)
+            print(metrics["report"])
             logging.info(output_info)
             logging.info(metrics["report"])
 
@@ -700,21 +733,55 @@ class EePipeline:
 if __name__ == "__main__":
     # obj_weight = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt"
     # ner_weright = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt"
+    check_base = (
+        "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
+    )
+    ner_path = check_base + "ner_duee_roberta_no_lexicon_len256_bs32.pt"
+    # for t_path in ["0_1.json", "2_3.json", "4_5.json"]:
 
-    for t_path in ["0_1.json", "2_3.json","4_5.json" ]:
-        args = EeArgs(
-            "ner", log=True, aug_mode='merge', model="roberta",weight_path='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_test_merge_evt.pt'
-        )
-        args.test_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/experiment/train_only/split_by_evt_num/{}".format(
-            t_path
-        )
+    #     args.test_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/experiment/train_only/split_by_evt_num/{}".format(
+    #         t_path
+    # )
     #     model = UIEModel(args)
     #     ee_pipeline = EePipeline(model, args)
     #     ee_pipeline.test()
     #     torch.cuda.empty_cache()
 
+    args = EeArgs(
+        "obj",
+        log=True,
+        aug_mode="merge",
+        model="roberta",
+        output_name="noLexicon_decode=0.5_512_32_sample2",
+    )
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()
+    torch.cuda.empty_cache()
 
-        model = UIEModel(args)
-        ee_pipeline = EePipeline(model, args)
-        ee_pipeline.test()
-        torch.cuda.empty_cache()
+    args = EeArgs(
+        "obj",
+        log=True,
+        aug_mode="merge",
+        model="roberta",
+        output_name="noLexicon_decode=0.5_512_32_sample2",
+    )
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()
+    torch.cuda.empty_cache()
+
+    args = EeArgs(
+        "obj",
+        log=True,
+        aug_mode="merge",
+        model="roberta",
+        output_name="noLexicon_decode=0.5_512_32_sample3",
+    )
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
+    ee_pipeline.test()
+    torch.cuda.empty_cache()
