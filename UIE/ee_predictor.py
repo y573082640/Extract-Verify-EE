@@ -186,7 +186,7 @@ class Predictor:
         data_loader = DataLoader(
             dataset=infer_data,
             batch_size=batch_size,
-            num_workers=3,
+            num_workers=4,
             shuffle=False
         )
 
