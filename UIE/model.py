@@ -54,7 +54,7 @@ class UIEModel(nn.Module):
         if "sbj" == args.task:
             self.re_sbj_start_fc = nn.Linear(hidden_dim, 1)
             self.re_sbj_end_fc = nn.Linear(hidden_dim, 1)
-        if "obj" == args.task:
+        if "obj" == args.task or "tri" == args.task:
             self.re_obj_start_fc = nn.Linear(hidden_dim, 1)
             self.re_obj_end_fc = nn.Linear(hidden_dim, 1)
         if "rel" == args.task:
@@ -378,7 +378,7 @@ class UIEModel(nn.Module):
             )
             res["re_output"] = re_output
 
-        elif "obj" == self.task:
+        elif "obj" == self.task or "tri" == self.task:
             re_output = self.re_obj_forward(
                 re_obj_input_ids=re_obj_input_ids,
                 re_obj_token_type_ids=re_obj_token_type_ids,

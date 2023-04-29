@@ -143,6 +143,8 @@ class EeDataset(ListDataset):
 
         if "obj" == self.args.task:  ## 如果采用辅助学习增强策略
             data = self.convert_argu_data(data, mode)
+        elif "tri" == self.args.task:  ## 如果采用拼接增强策略
+            data = self.convert_tri_data(data, mode)
         elif "ner" == self.args.task:  ## 如果采用拼接增强策略
             data = self.convert_evt_data(data, mode)
 
@@ -216,7 +218,59 @@ class EeDataset(ListDataset):
         }
 
         return argu_data
+    
+    def convert_tri_data(self, evt_tuple, mode=None):
+        ### 用于识别文本中同类事件的触发词
+        max_len = self.args.max_seq_len
+        text_tokens = [i for i in evt_tuple['text']]
+        pre_tokens = [i for i in evt_tuple['question']] + ["[SEP]"]
+        trigger_bias = len(["[CLS]"]  + pre_tokens)
 
+        concat_token = pre_tokens + text_tokens
+        # 防止太长
+        if len(concat_token) > max_len - 2:
+            concat_token = concat_token[: max_len - 2]
+
+        concat_token = ["[CLS]"] + concat_token + ["[SEP]"]
+        token_type_ids = [0] * len(concat_token)  # [CLS] +　pre_tokens
+
+        ### 添加首尾标签
+        tri_start_labels = [0] * len(concat_token)
+        tri_end_labels = [0] * len(concat_token)
+
+        for evt in evt_tuple['events']:
+            trigger_start_index = evt["trigger_start_index"] + trigger_bias
+            trigger_end_index = trigger_start_index + len(evt["trigger"]) - 1 ## 注意长度要-1，否则出界
+            
+            ## 长文本特例
+            if trigger_end_index < max_len:
+                tri_start_labels[trigger_start_index] = 1
+                tri_end_labels[trigger_end_index] = 1
+
+        if self.args.use_lexicon:
+            augment_Ids = generate_instance_with_gaz(
+                concat_token,
+                self.args.pos_alphabet,
+                self.args.word_alphabet,
+                self.args.biword_alphabet,
+                self.args.gaz_alphabet,
+                self.args.gaz_alphabet_count,
+                self.args.gaz,
+                max_len,
+            )
+        else:
+            augment_Ids = []
+
+        tri_data = {
+            "tri_tokens": concat_token,
+            "tri_start_labels": tri_start_labels,
+            "tri_end_labels": tri_end_labels,
+            "tri_token_type_ids": token_type_ids,
+            "augment_Ids": augment_Ids,
+        }
+
+        return tri_data
+            
     def convert_evt_data(self, evt, mode=None):
         max_len = self.args.max_seq_len
         entity_label = self.args.entity_label
@@ -278,7 +332,7 @@ class EeDataset(ListDataset):
 
             event_start_labels[ent_label2id[event_type]][trigger_start_index + 1] = 1
             event_end_labels[ent_label2id[event_type]][
-                trigger_start_index + len(trigger)
+                trigger_start_index + len(trigger) ## 这里是+1和-1抵消了
             ] = 1
 
         event_data = {
@@ -336,6 +390,13 @@ class EeCollate:
         batch_obj_argu_tuples = []
         batch_augment_Ids = []
         batch_sim_score = []
+
+        batch_tri_token_ids = []
+        batch_tri_attention_mask = []
+        batch_tri_token_type_ids = []
+        batch_tri_start_labels = []
+        batch_tri_end_labels = []
+        batch_tri_argu_tuples = []
         for i, data in enumerate(batch):
             augment_Ids = data["augment_Ids"]
             batch_augment_Ids.append(augment_Ids)
@@ -400,7 +461,41 @@ class EeCollate:
                 batch_raw_tokens.append(raw_tokens)
                 batch_sim_score.append(sim_score)
                 batch_obj_argu_tuples.append(obj_argu_tuples)
+            elif "tri" == self.task:
+                tri_tokens = data["tri_tokens"]
+                raw_tokens = tri_tokens
+                tri_tokens = self.tokenizer.convert_tokens_to_ids(tri_tokens)
+                tri_start_labels = data["tri_start_labels"]
+                tri_end_labels = data["tri_end_labels"]
+                tri_token_type_ids = data["tri_token_type_ids"]
+                sim_score = 0
 
+                # 对齐操作
+                if len(tri_tokens) < self.maxlen:
+                    tri_start_labels = tri_start_labels + [0] * (
+                        self.maxlen - len(tri_tokens)
+                    )
+                    tri_end_labels = tri_end_labels + [0] * (
+                        self.maxlen - len(tri_tokens)
+                    )
+                    tri_attention_mask = [1] * len(tri_tokens) + [0] * (
+                        self.maxlen - len(tri_tokens)
+                    )
+                    tri_token_type_ids = tri_token_type_ids + [0] * (
+                        self.maxlen - len(tri_tokens)
+                    )
+                    tri_tokens = tri_tokens + [0] * (self.maxlen - len(tri_tokens))
+                else:
+                    tri_attention_mask = [1] * self.maxlen
+
+                batch_tri_token_ids.append(tri_tokens)
+                batch_tri_attention_mask.append(tri_attention_mask)
+                batch_tri_token_type_ids.append(tri_token_type_ids)
+                batch_tri_start_labels.append(tri_start_labels)
+                batch_tri_end_labels.append(tri_end_labels)
+                batch_raw_tokens.append(raw_tokens)
+                batch_sim_score.append(sim_score)
+ 
         res = {}
 
         if "ner" == self.task:
@@ -448,6 +543,29 @@ class EeCollate:
             }
             res = sbj_obj_res
 
+        elif "tri" == self.task:
+            batch_tri_token_ids = convert_list_to_tensor(batch_tri_token_ids)
+            batch_tri_attention_mask = convert_list_to_tensor(batch_tri_attention_mask)
+
+            batch_tri_token_type_ids = convert_list_to_tensor(batch_tri_token_type_ids)
+            batch_tri_start_labels = convert_list_to_tensor(
+                batch_tri_start_labels, dtype=torch.float
+            )
+            batch_tri_end_labels = convert_list_to_tensor(
+                batch_tri_end_labels, dtype=torch.float
+            )
+            batch_sim_score = convert_list_to_tensor(batch_sim_score, dtype=torch.float)
+
+            tri_res = {
+                "re_obj_input_ids": batch_tri_token_ids,
+                "re_obj_attention_mask": batch_tri_attention_mask,
+                "re_obj_token_type_ids": batch_tri_token_type_ids,
+                "re_obj_start_labels": batch_tri_start_labels,
+                "re_obj_end_labels": batch_tri_end_labels,
+                "batch_sim_score": batch_sim_score,
+                "argu_tuples":[[]] ## code smell来了
+            }
+            res = tri_res
         # 用于错误输出
         res["raw_tokens"] = batch_raw_tokens
         # 用于词典增强

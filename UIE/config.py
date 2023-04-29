@@ -132,7 +132,7 @@ class EeArgs:
         self.train_epoch = 50
         self.train_batch_size = 32
         self.eval_batch_size = 8
-        self.eval_step = 300
+        self.eval_step = 50
         self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8

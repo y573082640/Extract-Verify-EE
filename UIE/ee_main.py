@@ -19,6 +19,7 @@ from UIE.utils.decode import (
     ner_decode_batch,
     ner_decode2,
     bj_decode,
+    bj_decode_label,
     ner_decode_label,
     obj_decode_batch,
     depart_ner_output_batch,
@@ -116,6 +117,7 @@ class EePipeline:
     def bj_eval_forward(self, data_loader, label, id2label, return_report=False):
         """主体或客体"""
         s_logits, e_logits = None, None
+        s_labels, e_labels = None, None
         raw_tokens = []
         argu_tuples = []
         masks = None
@@ -152,17 +154,23 @@ class EePipeline:
                 )
                 start_logits = output["re_output"]["obj_start_logits"].detach().cpu()
                 end_logits = output["re_output"]["obj_end_logits"].detach().cpu()
-
+                tmp_start_labels = batch_data["re_obj_start_labels"].detach().cpu()
+                tmp_end_labels = batch_data["re_obj_end_labels"].detach().cpu()
                 tmp_mask = batch_data["re_obj_attention_mask"].detach().cpu()
 
             if s_logits is None:
                 s_logits = start_logits
                 e_logits = end_logits
+                s_labels = tmp_start_labels
+                e_labels = tmp_end_labels
                 masks = tmp_mask
             else:
                 s_logits = np.append(s_logits, start_logits, axis=0)
                 e_logits = np.append(e_logits, end_logits, axis=0)
+                s_labels = np.append(s_labels, tmp_start_labels, axis=0)
+                e_labels = np.append(e_labels, tmp_end_labels, axis=0)
                 masks = np.append(masks, tmp_mask, axis=0)
+            
             loss += output["re_output"]["obj_loss"].item()
             raw_tokens += batch_data["raw_tokens"]
             argu_tuples += batch_data["argu_tuples"]
@@ -170,6 +178,8 @@ class EePipeline:
         bj_outputs = {
             "s_logits": s_logits,
             "e_logits": e_logits,
+            "s_labels": s_labels,
+            "e_labels": e_labels,            
             "masks": masks,
             "argu_tuples": argu_tuples,
             "raw_tokens": raw_tokens,
@@ -245,13 +255,25 @@ class EePipeline:
         return metrics
 
     def get_bj_metrics(self, bj_outputs, label, id2label, return_report=False):
-        role_metric, total_count = self.get_bj_metrics_helper(
-            bj_outputs, id2label, return_report
-        )
-        mirco_metrics = np.sum(role_metric, axis=0)
-        mirco_metrics = get_argu_p_r_f(
-            mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3]
-        )
+
+        
+        if 'tri' == self.args.task:
+            ### 触发词识别，需要使用严格匹配
+            role_metric, total_count = self.get_tri_metrics_helper(
+                bj_outputs, id2label, return_report
+            )
+            mirco_metrics = np.sum(role_metric, axis=0)
+            mirco_metrics = get_p_r_f(
+                mirco_metrics[0], mirco_metrics[1], mirco_metrics[2])
+        else:
+            ### 论元识别，需要使用F1匹配
+            role_metric, total_count = self.get_bj_metrics_helper(
+                bj_outputs, id2label, return_report
+            )
+            mirco_metrics = np.sum(role_metric, axis=0)
+            mirco_metrics = get_argu_p_r_f(
+                mirco_metrics[0], mirco_metrics[1], mirco_metrics[2], mirco_metrics[3]
+            )            
         res = {
             "precision": mirco_metrics[0],
             "recall": mirco_metrics[1],
@@ -264,6 +286,38 @@ class EePipeline:
             )
             res["report"] = report
         return res
+
+    def get_tri_metrics_helper(self, outputs, id2label, return_report):
+        total_count = [0 for _ in range(len(id2label))]
+        role_metric = np.zeros([len(id2label), 3])
+        s_logits = outputs["s_logits"]
+        e_logits = outputs["e_logits"]
+        s_labels = outputs["s_labels"]
+        e_labels = outputs["s_labels"]
+        masks = outputs["masks"]
+        raw_tokens = outputs["raw_tokens"]
+        for s_logit, e_logit, s_label, e_label, mask, text in zip(
+            s_logits, e_logits, s_labels, e_labels, masks, raw_tokens
+        ):
+            length = sum(mask)
+            # input = (label_num, max_len)
+            # output = {label:predict_index}
+            true_entities = bj_decode_label(
+                s_label, e_label, length, id2label
+            )
+            pred_entities = bj_decode(
+                s_logit, e_logit, length, id2label
+            )
+
+            for idx, _type in enumerate(list(id2label.values())):
+                if _type not in pred_entities:
+                    pred_entities[_type] = []
+                total_count[idx] += len(true_entities[_type])
+                role_metric[idx] += calculate_metric(
+                    pred_entities[_type], true_entities[_type], text
+                )
+
+        return role_metric, total_count
 
     def get_bj_metrics_helper(self, outputs, id2label, return_report):
         total_count = [0 for _ in range(len(id2label))]
@@ -341,9 +395,9 @@ class EePipeline:
         # (1492, 65, 256) = (num_cases,num_labels,max_len)
         e_logits = ner_outputs["ner_e_logits"]
         # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        s_label = ner_outputs["ner_start_labels"]
+        s_labels = ner_outputs["ner_start_labels"]
         # (1492, 65, 256) = (num_cases,num_labels,max_len)
-        e_label = ner_outputs["ner_end_labels"]
+        e_labels = ner_outputs["ner_end_labels"]
         # (1492, 65, 256) = (num_cases,num_labels,max_len)
         masks = ner_outputs["ner_masks"]
         raw_tokens = ner_outputs["raw_tokens"]
@@ -351,7 +405,7 @@ class EePipeline:
         with open("log/trigger_badcase.txt", "w") as file_object:
             file_object.write(str(time.time()) + "\n")
         for s_logit, e_logit, s_label, e_label, mask, text in zip(
-            s_logits, e_logits, s_label, e_label, masks, raw_tokens
+            s_logits, e_logits, s_labels, e_labels, masks, raw_tokens
         ):
             length = sum(mask)
             # input = (label_num, max_len)
@@ -412,7 +466,7 @@ class EePipeline:
             dataset=train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
-            num_workers=4,
+            ## num_workers=4,
             collate_fn=collate.collate_fn,
         )
         dev_loader = None
@@ -431,7 +485,7 @@ class EePipeline:
                 dataset=dev_dataset,
                 batch_size=self.args.eval_batch_size,
                 shuffle=False,
-                num_workers=4,
+                ## num_workers=4,
                 collate_fn=collate.collate_fn,
             )
 
@@ -464,7 +518,7 @@ class EePipeline:
                         augment_Ids=batch_data["batch_augment_Ids"],
                     )
                     loss = output["ner_output"]["ner_loss"]
-                elif "obj" == self.args.task:
+                elif "obj" == self.args.task or "tri" == self.args.task:
                     output = self.model(
                         re_obj_input_ids=batch_data["re_obj_input_ids"],
                         re_obj_token_type_ids=batch_data["re_obj_token_type_ids"],
@@ -497,7 +551,7 @@ class EePipeline:
                         eval_loss = ret["loss"]
                         metrics = ret["ner_metrics"]
 
-                    elif "obj" == self.args.task:
+                    elif "obj" == self.args.task or "tri" == self.args.task:
                         label = ["答案"]
                         id2label = {0: "答案"}
                         ret = self.bj_eval_forward(dev_loader, label, id2label)
@@ -553,7 +607,7 @@ class EePipeline:
             dataset=test_dataset,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
-            num_workers=4,
+            ## num_workers=4,
             collate_fn=collate.collate_fn,
         )
         self.load_model()
@@ -569,7 +623,7 @@ class EePipeline:
                 )
                 metrics = metrics["ner_metrics"]
 
-            elif "obj" == self.args.task:
+            elif "obj" == self.args.task or "tri" == self.args.task:
                 label = ["答案"]
                 id2label = {0: "答案"}
                 metrics = self.bj_eval_forward(
@@ -685,7 +739,7 @@ class EePipeline:
                     dataset=test_dataset,
                     batch_size=self.args.eval_batch_size,
                     shuffle=False,
-                    num_workers=4,
+                    ## num_workers=4,
                     collate_fn=collate.collate_fn,
                 )
 
@@ -755,11 +809,11 @@ if __name__ == "__main__":
     #     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "obj",
+        "tri",
         log=True,
-        aug_mode="merge",
+        aug_mode=None,
         model="roberta",
-        output_name="noRandom_repalce_decode=0.5_512_32_sample1",
+        output_name="testtest",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
@@ -767,28 +821,3 @@ if __name__ == "__main__":
     ee_pipeline.test()
     torch.cuda.empty_cache()
 
-    args = EeArgs(
-        "obj",
-        log=True,
-        aug_mode="merge",
-        model="roberta",
-        output_name="noRandom_repalce_decode=0.5_512_32_sample2",
-    )
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-    torch.cuda.empty_cache()
-
-    args = EeArgs(
-        "obj",
-        log=True,
-        aug_mode="merge",
-        model="roberta",
-        output_name="noRandom_repalce_decode=0.5_512_32_sample3",
-    )
-    model = UIEModel(args)
-    ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
-    ee_pipeline.test()
-    torch.cuda.empty_cache()

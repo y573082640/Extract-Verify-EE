@@ -156,6 +156,19 @@ def bj_decode(start_logits, end_logits, length, id2label):
 
     return predict_entities
 
+def bj_decode_label(start_labels, end_labels, length, id2label):
+    ## id2label = {0:'答案'}
+    predict_entities = {x: [] for x in list(id2label.values())}
+    for i, s_type in enumerate(start_labels):
+        if s_type == 0:
+            continue
+        for j, e_type in enumerate(end_labels[i:]):
+            if s_type == e_type:
+                predict_entities[id2label[0]].append((i, i+j+1))
+                break
+
+    return predict_entities
+
 def depart_ner_output_batch(output, batch_data, ner_s_logits, ner_e_logits, raw_tokens):
     # (num_labels,batch_size,max_len)
     ner_start_logits = output["ner_output"]["ner_start_logits"]
