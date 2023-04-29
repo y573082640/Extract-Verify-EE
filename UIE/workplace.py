@@ -37,3 +37,8 @@ train_df.to_csv(
     f"/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/train_log/train_loss_.csv",
     index=False,
 )
+
+import json
+with open('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/replace_set.json','r') as fp:
+    d = json.load(fp)
+    print(d.keys())

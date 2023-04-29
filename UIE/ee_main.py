@@ -755,11 +755,11 @@ if __name__ == "__main__":
     #     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "ner",
+        "obj",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noRandom_decode=0.5_512_32_sample1",
+        output_name="noRandom_repalce_decode=0.5_512_32_sample1",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
@@ -768,11 +768,11 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "ner",
+        "obj",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noRandom_decode=0.5_512_32_sample2",
+        output_name="noRandom_repalce_decode=0.5_512_32_sample2",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
@@ -781,11 +781,11 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "ner",
+        "obj",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noRandom_decode=0.5_512_32_sample3",
+        output_name="noRandom_repalce_decode=0.5_512_32_sample3",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)

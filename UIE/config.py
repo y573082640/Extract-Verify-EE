@@ -110,6 +110,16 @@ class EeArgs:
             "batch_augment_Ids",
             "text_ids",
         ]
+        self.replace_set_path = "./data/{}/{}/replace_set.json".format(
+            self.data_dir, self.data_name
+        )
+        self.argument_label_dict_path = "./data/{}/{}/argument_label_dict.json".format(
+            self.data_dir, self.data_name
+        )
+        with open(self.replace_set_path, "r") as fp:
+            self.replace_set = json.load(fp)
+        with open(self.argument_label_dict_path, "r") as fp:
+            self.argument_label_dict = json.load(fp)
         with open(self.label_path, "r") as fp:
             self.entity_label = fp.read().strip().split("\n")
         self.ent_label2id = {}
@@ -119,7 +129,7 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 30
+        self.train_epoch = 50
         self.train_batch_size = 32
         self.eval_batch_size = 8
         self.eval_step = 300
@@ -149,6 +159,7 @@ class EeArgs:
         self.bichar_emb = "./data/embs/gigaword_chn.all.a2b.bi.ite50.vec"
         gaz_dim = gaz_dim if gaz_dim in [50, 100, 200] else 50
         self.gaz_file = gaz_dict.get(gaz_dim, 50)
+        self.aug_mode = aug_mode
 
         if log:
             self.logs_save_dir = "log"
@@ -160,6 +171,8 @@ class EeArgs:
             )
             logging.info("\n\n\n\n\n########  <----------------------->")
             for key, value in self.__dict__.items():
+                if key == 'replace_set':
+                    continue
                 logging.info(f"########  {key} = {value}")
 
         if self.use_lexicon:
@@ -178,7 +191,6 @@ class EeArgs:
                 self.label2role = json.load(fp)
 
         # 相似度计算，用于辅助训练和文本增强
-        self.aug_mode = aug_mode
         logging.info("...加载相似度匹配模型:" + self.sim_model)
         self.sim_scorer = Sim_scorer(self.sim_model)
         logging.info("...构造提示库embedding")

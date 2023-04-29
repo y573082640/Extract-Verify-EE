@@ -26,6 +26,43 @@ NULLKEY = "-null-"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
+def find_all(sub_str, string):
+    positions = []
+    pos = string.find(sub_str)
+    while pos != -1:
+        positions.append(pos)
+        pos = string.find(sub_str, pos + 1)
+    return positions
+
+
+def replace_text(role_tuple, old, new):
+    text = role_tuple["text"]
+    all_index = find_all(old, text)
+    bias = len(new) - len(old)
+    multi = 0
+    for index in all_index:
+        if index < role_tuple["trigger_start_index"]:
+            multi += 1
+    role_tuple["trigger_start_index"] += bias * multi
+    for argu in role_tuple["arguments"]:
+        multi = 0
+        for index in all_index:
+            if index < argu["argument_start_index"]:
+                multi += 1
+        argu["argument_start_index"] += bias * multi
+        if argu["argument"] == old:
+            argu["argument"] = new
+    role_tuple["text"] = text.replace(old, new)
+
+
+def random_replace(role_tuple, argument_label_dict, replace_set):
+    random_argu = random.choice(role_tuple["arguments"])["argument"]
+    label = argument_label_dict[role_tuple["event_type"] + "-" + role_tuple["role"]]
+    new_argument = random.choice(replace_set[label])
+    replace_text(role_tuple, random_argu, new_argument)
+    return role_tuple
+
+
 def merge_evt(evt_origin, evt_aug):
     ret = {"text": "", "id": evt_origin["id"], "event_list": []}
 
@@ -112,7 +149,6 @@ class EeDataset(ListDataset):
         return data
 
     def convert_argu_data(self, role_tuple, mode=None):
-        
         max_len = self.args.max_seq_len
 
         demo_tuples = self.args.demo_tuples
@@ -130,12 +166,18 @@ class EeDataset(ListDataset):
             demo = None
 
         if mode == "merge":
+            random_number = random.choice([1, 2, 3])
+            if random_number == 1:
+                role_tuple = random_replace(
+                    role_tuple, self.args.argument_label_dict, self.args.replace_set
+                )
+
             random_number = random.choice([1, 2, 3, 4])
             if random_number == 3:  ## 随机选取事件拼接
-                sim_ids = random.sample(role_tuple["sim_ids"],2)
+                sim_ids = random.sample(role_tuple["sim_ids"], 2)
                 role_augs = [self.args.demo_tuples[sim_id] for sim_id in sim_ids]
                 for role_aug in role_augs:
-                    role_tuple = merge_argu(role_tuple, role_aug)   
+                    role_tuple = merge_argu(role_tuple, role_aug)
             elif random_number == 4:  ## 选择相似事件
                 sim_id = random.choice(role_tuple["sim_ids"])
                 role_aug = self.args.demo_tuples[sim_id]
@@ -185,10 +227,10 @@ class EeDataset(ListDataset):
             random_number = random.choice([1, 2, 3, 4])
             # logging.debug(random_number)
             if random_number == 3:  ## 随机选取事件拼接
-                sim_ids = random.sample(evt["sim_ids"],2)
+                sim_ids = random.sample(evt["sim_ids"], 2)
                 evt_augs = [self.args.demo_tuples[sim_id] for sim_id in sim_ids]
                 for evt_aug in evt_augs:
-                    evt = merge_evt(evt, evt_aug)   
+                    evt = merge_evt(evt, evt_aug)
             elif random_number == 4:  ## 选择相似事件
                 evt_aug = self.args.demo_tuples[sim_id]
                 evt = merge_evt(evt_origin=evt, evt_aug=evt_aug)
