@@ -4,6 +4,9 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModel
 from sentence_transformers import util
 import time
+import re
+def find_all(sub,ori):
+    return [substr.start() for substr in re.finditer(sub, ori)]
 
 # 1 分别编码所有的文本 触发词 和 问题
 # 2 针对问题拼接
@@ -38,7 +41,7 @@ def create_role_tuple(data):
         for role, arguments in role_dict.items():
             question = get_question_for_argument(
                 event_type=event_type, role=role)
-            concat_texts.append("事件类型是%s,%s,事件触发词是%s,文本复杂度为%d" % (event_type, question, trigger, len(text)//50+len(event_list)))
+            concat_texts.append("事件类型是%s,%s,事件触发词是%s" % (event_type, question, trigger))
             tuples.append({
                 'text': text,
                 'trigger': trigger,
@@ -301,7 +304,7 @@ class Sim_scorer:
         return embs, tuples
 
     def sim_match(self, text_embs, demo_embs, ignore_first=False):
-        most_sim = util.semantic_search(text_embs, demo_embs, top_k=4)
+        most_sim = util.semantic_search(text_embs, demo_embs, top_k=5)
         ret = []
         for top_list in most_sim:
             tmp = []

@@ -119,7 +119,7 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 20
+        self.train_epoch = 30
         self.train_batch_size = 32
         self.eval_batch_size = 8
         self.eval_step = 300

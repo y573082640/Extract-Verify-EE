@@ -112,10 +112,12 @@ class EeDataset(ListDataset):
         return data
 
     def convert_argu_data(self, role_tuple, mode=None):
-        sim_id = random.choice(role_tuple["sim_ids"])
+        
         max_len = self.args.max_seq_len
 
         demo_tuples = self.args.demo_tuples
+
+        sim_id = role_tuple["sim_ids"][0]
         demo = creat_demo(demo_tuples[sim_id])
 
         if (
@@ -130,9 +132,12 @@ class EeDataset(ListDataset):
         if mode == "merge":
             random_number = random.choice([1, 2, 3, 4])
             if random_number == 3:  ## 随机选取事件拼接
-                role_aug = random.choice(self.data)
-                role_tuple = merge_argu(role_tuple, role_aug)
+                sim_ids = random.sample(role_tuple["sim_ids"],2)
+                role_augs = [self.args.demo_tuples[sim_id] for sim_id in sim_ids]
+                for role_aug in role_augs:
+                    role_tuple = merge_argu(role_tuple, role_aug)   
             elif random_number == 4:  ## 选择相似事件
+                sim_id = random.choice(role_tuple["sim_ids"])
                 role_aug = self.args.demo_tuples[sim_id]
                 role_tuple = merge_argu(role_tuple, role_aug)
             else:  ## 什么都不做
@@ -180,8 +185,10 @@ class EeDataset(ListDataset):
             random_number = random.choice([1, 2, 3, 4])
             # logging.debug(random_number)
             if random_number == 3:  ## 随机选取事件拼接
-                evt_aug = random.choice(self.data)
-                evt = merge_evt(evt_origin=evt, evt_aug=evt_aug)
+                sim_ids = random.sample(evt["sim_ids"],2)
+                evt_augs = [self.args.demo_tuples[sim_id] for sim_id in sim_ids]
+                for evt_aug in evt_augs:
+                    evt = merge_evt(evt, evt_aug)   
             elif random_number == 4:  ## 选择相似事件
                 evt_aug = self.args.demo_tuples[sim_id]
                 evt = merge_evt(evt_origin=evt, evt_aug=evt_aug)

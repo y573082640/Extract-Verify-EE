@@ -443,7 +443,11 @@ class EePipeline:
         self.model.to(self.args.device)
         eval_step = self.args.eval_step
         best_f1 = 0.0
+        early_stop_cnt = 0
         for epoch in range(1, self.args.train_epoch + 1):
+            if early_stop_cnt >= 12:
+                logging.warn('early stop before epoch{}'.format(epoch))
+                break
             for batch_data in tqdm.tqdm((train_loader)):
                 train_loss = 0
                 self.model.train()
@@ -521,14 +525,17 @@ class EePipeline:
                     train_loss = 0
                     ###
                     if metrics["f1"] > best_f1:
+                        early_stop_cnt = 0
                         best_f1 = metrics["f1"]
                         print("【best_f1】：{}".format(best_f1))
                         logging.info("【best_f1】：{}".format(best_f1))
                         self.save_model()
+                    else:
+                        early_stop_cnt += 1
 
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        train_result.to_csv(
-            f"/log/train_log/train_loss_{current_time}.csv",
+        train_df.to_csv(
+            f"/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/train_log/train_loss_{current_time}.csv",
             index=False,
         )
 
@@ -748,11 +755,11 @@ if __name__ == "__main__":
     #     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "obj",
+        "ner",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noLexicon_decode=0.5_512_32_sample2",
+        output_name="noRandom_decode=0.5_512_32_sample1",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
@@ -761,11 +768,11 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "obj",
+        "ner",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noLexicon_decode=0.5_512_32_sample2",
+        output_name="noRandom_decode=0.5_512_32_sample2",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
@@ -774,11 +781,11 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "obj",
+        "ner",
         log=True,
         aug_mode="merge",
         model="roberta",
-        output_name="noLexicon_decode=0.5_512_32_sample3",
+        output_name="noRandom_decode=0.5_512_32_sample3",
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)

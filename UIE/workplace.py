@@ -4,7 +4,7 @@ tokenizer = BertTokenizer.from_pretrained(bert_dir)
 tokenizer.add_special_tokens({'additional_special_tokens':["[TGR]","[DEMO]","[ARG]"]})
 tokenizer.save_pretrained('model_hub/tmp/')
 import numpy as np
-
+import pandas as pd
 def apply_label_smoothing(label_list, factor):
     smoothed_labels = np.full((len(label_list), ), factor / (len(label_list) - 1))
     true_label_indices = np.nonzero(label_list)[0]
@@ -29,3 +29,11 @@ label_list[50] = 1
 factor = 0.1
 smoothed_labels = apply_label_smoothing(label_list, factor)
 print(smoothed_labels)
+
+train_df = pd.DataFrame(
+    columns=["step", "train loss", "eval loss", "precision", "recall"]
+)
+train_df.to_csv(
+    f"/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/train_log/train_loss_.csv",
+    index=False,
+)

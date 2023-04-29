@@ -142,8 +142,8 @@ def ner_decode_label(start_labels, end_labels, length, id2label):
 def bj_decode(start_logits, end_logits, length, id2label):
     ## id2label = {0:'答案'}
     predict_entities = {x: [] for x in list(id2label.values())}
-    start_pred = np.where(sigmoid(start_logits) > 0.1, 1, 0)
-    end_pred = np.where(sigmoid(end_logits) > 0.1, 1, 0)
+    start_pred = np.where(sigmoid(start_logits) > 0.5, 1, 0)
+    end_pred = np.where(sigmoid(end_logits) > 0.5, 1, 0)
     # print(start_pred)
     # print(end_pred)
     for i, s_type in enumerate(start_pred):
