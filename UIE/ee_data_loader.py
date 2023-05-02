@@ -136,10 +136,7 @@ class EeDataset(ListDataset):
 
     def __getitem__(self, index):
         data = self.data[index]
-        if self.test:
-            mode = None
-        else:
-            mode = self.args.aug_mode
+        mode = self.args.aug_mode
 
         if "obj" == self.args.task:  ## 如果采用辅助学习增强策略
             data = self.convert_argu_data(data, mode)
@@ -156,16 +153,16 @@ class EeDataset(ListDataset):
         demo_tuples = self.args.demo_tuples
 
         sim_id = role_tuple["sim_ids"][0]
-        demo = creat_demo(demo_tuples[sim_id])
+        demo = None
 
-        if (
-            len(demo) + len(role_tuple["question"] + role_tuple["text"]) + 1
-            > max_len - 2
-        ):  ### +1是因为中间有个[SEP]
-            demo = None
-
-        if mode != "demo":
-            demo = None
+        if mode == "demo":
+            demo = creat_demo(demo_tuples[sim_id])
+            # logging.debug(demo)
+            if (
+                len(demo) + len(role_tuple["question"] + role_tuple["text"]) + 1
+                > max_len - 2
+            ):  ### +1是因为中间有个[SEP]
+                demo = None
 
         if mode == "merge":
             random_number = random.choice([1, 2, 3])
@@ -216,15 +213,15 @@ class EeDataset(ListDataset):
             "argu_tuples": argu_tuples,
             "sim_id": sim_id,
         }
-
+        # logging.info(argu_data)
         return argu_data
-    
+
     def convert_tri_data(self, evt_tuple, mode=None):
         ### 用于识别文本中同类事件的触发词
         max_len = self.args.max_seq_len
-        text_tokens = [i for i in evt_tuple['text']]
-        pre_tokens = [i for i in evt_tuple['question']] + ["[SEP]"]
-        trigger_bias = len(["[CLS]"]  + pre_tokens)
+        text_tokens = [i for i in evt_tuple["text"]]
+        pre_tokens = [i for i in evt_tuple["question"]] + ["[SEP]"]
+        trigger_bias = len(["[CLS]"] + pre_tokens)
 
         concat_token = pre_tokens + text_tokens
         # 防止太长
@@ -238,10 +235,12 @@ class EeDataset(ListDataset):
         tri_start_labels = [0] * len(concat_token)
         tri_end_labels = [0] * len(concat_token)
 
-        for evt in evt_tuple['events']:
+        for evt in evt_tuple["events"]:
             trigger_start_index = evt["trigger_start_index"] + trigger_bias
-            trigger_end_index = trigger_start_index + len(evt["trigger"]) - 1 ## 注意长度要-1，否则出界
-            
+            trigger_end_index = (
+                trigger_start_index + len(evt["trigger"]) - 1
+            )  ## 注意长度要-1，否则出界
+
             ## 长文本特例
             if trigger_end_index < max_len:
                 tri_start_labels[trigger_start_index] = 1
@@ -268,9 +267,9 @@ class EeDataset(ListDataset):
             "tri_token_type_ids": token_type_ids,
             "augment_Ids": augment_Ids,
         }
-
+        # logging.info(tri_data)
         return tri_data
-            
+
     def convert_evt_data(self, evt, mode=None):
         max_len = self.args.max_seq_len
         entity_label = self.args.entity_label
@@ -332,7 +331,7 @@ class EeDataset(ListDataset):
 
             event_start_labels[ent_label2id[event_type]][trigger_start_index + 1] = 1
             event_end_labels[ent_label2id[event_type]][
-                trigger_start_index + len(trigger) ## 这里是+1和-1抵消了
+                trigger_start_index + len(trigger)  ## 这里是+1和-1抵消了
             ] = 1
 
         event_data = {
@@ -495,7 +494,7 @@ class EeCollate:
                 batch_tri_end_labels.append(tri_end_labels)
                 batch_raw_tokens.append(raw_tokens)
                 batch_sim_score.append(sim_score)
- 
+
         res = {}
 
         if "ner" == self.task:
@@ -563,7 +562,7 @@ class EeCollate:
                 "re_obj_start_labels": batch_tri_start_labels,
                 "re_obj_end_labels": batch_tri_end_labels,
                 "batch_sim_score": batch_sim_score,
-                "argu_tuples":[[]] ## code smell来了
+                "argu_tuples": [[]],  ## code smell来了
             }
             res = tri_res
         # 用于错误输出

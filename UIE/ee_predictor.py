@@ -40,15 +40,15 @@ def name_with_date(name):
 def map_fn(example , mode='correct'):
     # 在文本中插入sptgr特殊标志
     text = example['text']
-    trigger_start_index = example['trigger_start_index']
-    trigger = example['trigger']
+    # trigger_start_index = example['trigger_start_index']
+    # trigger = example['trigger']
     text_tokens = [b for b in text]
-    tgr1_index = trigger_start_index
-    tgr2_index = trigger_start_index + 1 + len(trigger)
-    text_tokens.insert(tgr1_index, '[TGR]')
-    text_tokens.insert(tgr2_index, '[TGR]')
-    if not text_tokens[-1] == '。':
-        text_tokens.append("。")
+    # tgr1_index = trigger_start_index
+    # tgr2_index = trigger_start_index + 1 + len(trigger)
+    # text_tokens.insert(tgr1_index, '[TGR]')
+    # text_tokens.insert(tgr2_index, '[TGR]')
+    # if not text_tokens[-1] == '。':
+    #     text_tokens.append("。")
 
     text_tokens = ''.join(text_tokens)
     # 构建问题和回答
@@ -60,7 +60,8 @@ def map_fn(example , mode='correct'):
                             "答案： unused4 unused5 [MASK] unused6 unused7 。"
     elif mode == 'exist':
         que_str = get_question_for_verify(example['event_type'], example['role'])
-        que_str = '[SEP]问题：' + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
+        # que_str = '[SEP]问题：' + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
+        que_str = '[SEP] [MASK] ' + que_str
     else:
         raise AttributeError('提供的mode应该为exist 或者 correct')
     
@@ -169,7 +170,7 @@ class Predictor:
         ret = self.obj_pipeline.predict(data=argu_input)
         return ret
 
-    def verify_result(self, argu_input, obj_result, batch_size=64, model_path="checkpoints/ee/mlm_label"):
+    def verify_result(self, argu_input, obj_result, batch_size=64, model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_exist_roberta 9375"):
 
         evt_role,datas = self._create_verified_dataset(argu_input, obj_result)
         # load your model and tokenizer from a local directory or a URL
@@ -201,10 +202,16 @@ class Predictor:
                 ret += evt_role[i]
         return ret
 
-    def joint_predict(self, filepath, output):
+    def joint_predict(self, filepath, output, no_trigger=False, input_event_type=None):
         st = time()
-        ner_result = self.predict_ner(filepath)
-        argu_input = self.decode_ner_to_obj(ner_result)
+        if no_trigger and input_event_type:
+            argu_input = []
+            with open('input_event_type','r') as fp:
+                for line in fp:
+                    argu_input.append(json.loads(line))
+        else:
+            ner_result = self.predict_ner(filepath)
+            argu_input = self.decode_ner_to_obj(ner_result)
 
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
@@ -244,13 +251,13 @@ class Predictor:
 check_base = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/'
 ner_path = check_base + 'ner_duee_roberta_no_lexicon_len256_bs32.pt'
 obj_path = check_base + 'obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt'
-
+tri_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/tri_duee_roberta_None_trigger_extraction_noneAug.pt"
 if __name__ == "__main__":
-    ner_args = EeArgs('ner', use_lexicon=False, log=True, weight_path=ner_path)
+    ner_args = EeArgs('tri', use_lexicon=False, log=True, weight_path=tri_path)
     obj_args = EeArgs('obj', log=False, weight_path=obj_path)
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = 'data/ee/duee/duee_dev.json'
+    t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/event_detection_result.json'
     output_path = name_with_date('output')
-    predict_tool.joint_predict(t_path, output_path)
+    predict_tool.joint_predict(t_path, output_path,no_trigger=True,input_event_type="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/event_detection_9575.json")
 
 

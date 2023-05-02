@@ -17,19 +17,63 @@ def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids,
     ret = []
     for s_logit, e_logit, mask, text, e_id, role in zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles):
         length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.1)
         values = pred_entities["答案"]
         for v in values:
-            start = v[0]
+            start = v[0]  ## 文本中包含了开头结尾的CLS和SEP，不需要-1
             end = v[1]
             ans = "".join(text[start:end]).replace("[TGR]", "")
-            ret.append({
-                'role': role,
-                'argument': ans,
-                'event_id': e_id,
-            })
+            if ans != "":
+                ret.append({
+                    'role': role,
+                    'argument': ans,
+                    'event_id': e_id,
+                })
     return ret
 
+def tri_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, text_ids, event_types, text_bias):
+    ret = []
+    for s_logit, e_logit, mask, text, t_id, e_type, bias in zip(s_logits, e_logits, masks, raw_tokens, text_ids, event_types, text_bias):
+        length = sum(mask)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.45)
+        values = pred_entities["答案"]
+        for v in values:
+            start = v[0] - 1 ## 文本中没有开头结尾的CLS和SEP，而LOGITS中有，因此减一
+            end = v[1] - 1
+            ans = "".join(text[start:end])
+            if start > bias:
+                ret.append({
+                    'event_type': e_type,
+                    'trigger': ans,
+                    "trigger_start_index":start - bias,
+                    "arguments":[],
+                    'id': t_id, 
+                    'text':"".join(text[bias:]).replace("[SEP]",""),
+                })
+    data_dict = {}
+    for event_tuple in ret:
+        text_id = event_tuple['id']
+        event_type = event_tuple['event_type']
+        if not data_dict.__contains__(text_id):
+            data_dict[text_id] = {
+                "event_dict":{},
+                "text_id":text_id,
+                "text" : event_tuple['text']
+            }
+        event_dict = data_dict[text_id]['event_dict']
+        ## [["不","敌"],187]
+        if not event_dict.__contains__(event_type):
+            event_dict[event_type] = []
+
+        event_dict[event_type].append(
+            (
+                [i for i in event_tuple['trigger']],event_tuple['trigger_start_index']
+            )
+        )
+    # logging.info(ret)
+    # exit(0)
+    return data_dict.values()
+                     
 # def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
 #     with multiprocessing.Pool() as pool:
 #         # 将输入数据打包成一个列表
@@ -88,7 +132,7 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
             for j, e_type in enumerate(end_pred[i:]):
                 if s_type == e_type:
                     tmp_ent = raw_text[i:i + j + 1]
-                    logging.debug(tmp_ent)
+                    # logging.debug(tmp_ent)
                     if tmp_ent == '':
                         continue
                     predict_entities[id2label[label_id]].append((tmp_ent, i))
@@ -104,8 +148,8 @@ def ner_decode2(start_logits, end_logits, length, id2label):
     predict_entities = {x: [] for x in list(id2label.values())}
     
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.25, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.25, 1, 0)
         start_pred = start_logit
         end_pred = end_logit
         for i, s_type in enumerate(start_pred):
@@ -139,11 +183,11 @@ def ner_decode_label(start_labels, end_labels, length, id2label):
                     break
     return predict_entities
 
-def bj_decode(start_logits, end_logits, length, id2label):
+def bj_decode(start_logits, end_logits, length, id2label, bound=0.45):
     ## id2label = {0:'答案'}
     predict_entities = {x: [] for x in list(id2label.values())}
-    start_pred = np.where(sigmoid(start_logits) > 0.5, 1, 0)
-    end_pred = np.where(sigmoid(end_logits) > 0.5, 1, 0)
+    start_pred = np.where(sigmoid(start_logits) > bound, 1, 0)
+    end_pred = np.where(sigmoid(end_logits) > bound, 1, 0)
     # print(start_pred)
     # print(end_pred)
     for i, s_type in enumerate(start_pred):

@@ -28,7 +28,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Any, Optional, Tuple
-
+import numpy as np
 import datasets
 import evaluate
 from datasets import load_dataset
@@ -76,8 +76,10 @@ class MyDataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         probability_matrix = torch.full(labels.shape, self.mlm_probability)
 
         # 固定mask住预测值
-        target_mask = labels.eq(self.tokenizer.convert_tokens_to_ids('unused5'))
-        target_mask = torch.roll(target_mask,1,-1)
+        target_mask1 = labels.eq(self.tokenizer.convert_tokens_to_ids('有'))
+        target_mask2 = labels.eq(self.tokenizer.convert_tokens_to_ids('没'))
+        target_mask = target_mask1 | target_mask2
+        # target_mask = torch.roll(target_mask,1,-1)
         probability_matrix.masked_fill_(target_mask, value=1.0)
 
         if special_tokens_mask is None:
@@ -649,7 +651,17 @@ def main():
             mask = labels != -100
             labels = labels[mask]
             preds = preds[mask]
-            return metric.compute(predictions=preds, references=labels)
+            ### 只关注有的部分
+            labels = np.argwhere(labels == 3300).squeeze() ## 3300=有
+            preds = np.argwhere(preds == 3300).squeeze()              
+            result = len(np.intersect1d(labels, preds))
+            precision = result/len(preds)
+            recall = result/len(labels)
+            f1 = 2.0*recall*precision/(precision+recall)
+            with open('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/tri wrong.txt','a') as fp:
+                fp.write(str("{} {} {}".format(precision,recall,f1)))
+            ### 只关注有的部分
+            return {'precision':f1}
 
     # Data collator
     # This one will take care of randomly masking the tokens.

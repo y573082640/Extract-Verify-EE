@@ -109,6 +109,8 @@ class EeArgs:
             "argu_tuples",
             "batch_augment_Ids",
             "text_ids",
+            "event_types",
+            "text_bias"
         ]
         self.replace_set_path = "./data/{}/{}/replace_set.json".format(
             self.data_dir, self.data_name
@@ -129,10 +131,10 @@ class EeArgs:
             self.ent_label2id[label] = i
             self.ent_id2label[i] = label
         self.ner_num_labels = len(self.entity_label)
-        self.train_epoch = 50
+        self.train_epoch = 20
         self.train_batch_size = 32
         self.eval_batch_size = 8
-        self.eval_step = 50
+        self.eval_step = 300
         self.max_seq_len = 512
         self.weight_decay = 0.01
         self.adam_epsilon = 1e-8

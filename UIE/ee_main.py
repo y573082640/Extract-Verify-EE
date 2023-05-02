@@ -22,6 +22,7 @@ from UIE.utils.decode import (
     bj_decode_label,
     ner_decode_label,
     obj_decode_batch,
+    tri_decode_batch,
     depart_ner_output_batch,
 )
 from UIE.utils.metrics import (
@@ -282,7 +283,7 @@ class EePipeline:
         }
         if return_report:
             report = classification_report(
-                role_metric, label, id2label, total_count, metrics_type="obj"
+                role_metric, label, id2label, total_count, metrics_type=self.args.task
             )
             res["report"] = report
         return res
@@ -293,7 +294,7 @@ class EePipeline:
         s_logits = outputs["s_logits"]
         e_logits = outputs["e_logits"]
         s_labels = outputs["s_labels"]
-        e_labels = outputs["s_labels"]
+        e_labels = outputs["e_labels"]
         masks = outputs["masks"]
         raw_tokens = outputs["raw_tokens"]
         for s_logit, e_logit, s_label, e_label, mask, text in zip(
@@ -306,7 +307,7 @@ class EePipeline:
                 s_label, e_label, length, id2label
             )
             pred_entities = bj_decode(
-                s_logit, e_logit, length, id2label
+                s_logit, e_logit, length, id2label, bound=0.5
             )
 
             for idx, _type in enumerate(list(id2label.values())):
@@ -331,7 +332,7 @@ class EePipeline:
             s_logits, e_logits, argu_tuples, masks, raw_tokens
         ):
             length = sum(mask)
-            pred_entities = bj_decode(s_logit, e_logit, length, id2label)
+            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.45)
             true_entities = {"答案": argu_tuple}
 
             # print("========================")
@@ -382,7 +383,7 @@ class EePipeline:
         }
         if return_report:
             report = classification_report(
-                role_metric, label, id2label, total_count, metrics_type="ner"
+                role_metric, label, id2label, total_count, metrics_type=self.args.task
             )
             res["report"] = report
         return res
@@ -466,7 +467,7 @@ class EePipeline:
             dataset=train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
-            ## num_workers=4,
+            num_workers=4,
             collate_fn=collate.collate_fn,
         )
         dev_loader = None
@@ -485,7 +486,7 @@ class EePipeline:
                 dataset=dev_dataset,
                 batch_size=self.args.eval_batch_size,
                 shuffle=False,
-                ## num_workers=4,
+                num_workers=4,
                 collate_fn=collate.collate_fn,
             )
 
@@ -607,7 +608,7 @@ class EePipeline:
             dataset=test_dataset,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
-            ## num_workers=4,
+            num_workers=4,
             collate_fn=collate.collate_fn,
         )
         self.load_model()
@@ -707,6 +708,76 @@ class EePipeline:
                 return merged_ret
 
             # tokens = ['[CLS]'] + tokens + ['[SEP]'] + tokens + + ['[SEP]']
+            elif "tri" == self.args.task:
+                s_logits, e_logits = None, None
+                raw_tokens, text_ids, event_types,text_bias = [],[], [], []
+
+                logging.info("...构建测试数据集：" + filepath)
+                test_dataset = EeDatasetPredictor(
+                    file_path=filepath,
+                    args=self.args,
+                )
+
+                collate = EeCollatePredictor(
+                    max_len=self.args.max_seq_len,
+                    task=self.args.task,
+                    args=self.args,
+                )
+
+                test_loader = DataLoader(
+                    dataset=test_dataset,
+                    batch_size=self.args.eval_batch_size,
+                    shuffle=False,
+                    collate_fn=collate.collate_fn,
+                )
+                for batch_data in tqdm.tqdm(test_loader):
+                    for key in batch_data.keys():
+                        if key not in self.args.ignore_key:
+                            batch_data[key] = batch_data[key].to(self.args.device)
+                    output = self.model(
+                        re_obj_input_ids=batch_data["re_obj_input_ids"],
+                        re_obj_token_type_ids=batch_data["re_obj_token_type_ids"],
+                        re_obj_attention_mask=batch_data["re_obj_attention_mask"],
+                        augment_Ids=batch_data["batch_augment_Ids"],
+                    )
+                    start_logits = (
+                        output["re_output"]["obj_start_logits"].detach().cpu()
+                    )
+                    end_logits = output["re_output"]["obj_end_logits"].detach().cpu()
+                    tmp_mask = batch_data["re_obj_attention_mask"].detach().cpu()
+
+                    if start_logits.dim() < 2:
+                        start_logits = start_logits.unsqueeze(0)
+                        end_logits = end_logits.unsqueeze(0)
+
+                    if s_logits is None:
+                        s_logits = start_logits
+                        e_logits = end_logits
+                        masks = tmp_mask
+                    else:
+                        s_logits = np.append(s_logits, start_logits, axis=0)
+                        e_logits = np.append(e_logits, end_logits, axis=0)
+                        masks = np.append(masks, tmp_mask, axis=0)
+
+                    raw_tokens += batch_data["raw_tokens"]
+                    text_ids += batch_data["text_ids"]
+                    event_types += batch_data["event_types"]
+                    text_bias += batch_data["text_bias"]
+                logging.info("...进行触发词解码")
+                ret = tri_decode_batch(
+                    s_logits=s_logits,
+                    e_logits=e_logits,
+                    masks=masks,
+                    id2label={0: "答案"},
+                    raw_tokens=raw_tokens,
+                    text_ids=text_ids,
+                    event_types=event_types,
+                    text_bias=text_bias
+                )
+                logging.info("...触发词预测完毕")
+
+                return ret
+            
             elif "obj" == self.args.task:
                 """
                 {
@@ -739,7 +810,7 @@ class EePipeline:
                     dataset=test_dataset,
                     batch_size=self.args.eval_batch_size,
                     shuffle=False,
-                    ## num_workers=4,
+                    num_workers=4,
                     collate_fn=collate.collate_fn,
                 )
 
@@ -793,11 +864,13 @@ class EePipeline:
 
 if __name__ == "__main__":
     # obj_weight = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt"
-    # ner_weright = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt"
+    ner_weright = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt"
     check_base = (
         "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
     )
-    ner_path = check_base + "ner_duee_roberta_no_lexicon_len256_bs32.pt"
+    ner_path = check_base + "tri_duee_roberta_None_trigger_extraction.pt"
+
+    path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/tri_duee_roberta_None_trigger_extraction.pt"
     # for t_path in ["0_1.json", "2_3.json", "4_5.json"]:
 
     #     args.test_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/experiment/train_only/split_by_evt_num/{}".format(
@@ -809,11 +882,12 @@ if __name__ == "__main__":
     #     torch.cuda.empty_cache()
 
     args = EeArgs(
-        "tri",
+        "obj",
         log=True,
-        aug_mode=None,
+        aug_mode='demo',
         model="roberta",
-        output_name="testtest",
+        output_name="【论元抽取】新demo"
+        # weight_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_None_【事件无关】sample2.pt"
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)

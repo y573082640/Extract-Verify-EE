@@ -18,7 +18,45 @@ NULLKEY = "-null-"
 
 
 class EeDatasetPredictor(ListDataset):
-    def process_list_data(self,data_list):
+    def convert_tri_data(self, data):
+        ### 用于识别文本中同类事件的触发词
+        max_len = self.args.max_seq_len
+        text_tokens = [i for i in data["text"]]
+        pre_tokens = [i for i in data["question"]] + ["[SEP]"]
+
+        concat_token = pre_tokens + text_tokens
+
+        if self.args.use_lexicon:
+            augment_Ids = generate_instance_with_gaz(
+                concat_token,
+                self.args.pos_alphabet,
+                self.args.word_alphabet,
+                self.args.biword_alphabet,
+                self.args.gaz_alphabet,
+                self.args.gaz_alphabet_count,
+                self.args.gaz,
+                max_len,
+            )
+        else:
+            augment_Ids = []
+
+        tri_data = {
+            "text_id":data['id'],
+            "tri_tokens": concat_token,
+            "augment_Ids": augment_Ids,
+            "event_type": data['event_type'],
+            "text_bias":len(pre_tokens) 
+        }
+
+        return tri_data
+
+    def __getitem__(self, index):
+        data = self.data[index]
+        if "tri" == self.args.task:
+            data = self.convert_tri_data(data)
+        return data
+
+    def process_list_data(self, data_list):
         """
         event = {
             "event_type":e_type,
@@ -29,7 +67,7 @@ class EeDatasetPredictor(ListDataset):
         }
         """
         ret = []
-        if self.args.aug_mode=='demo':
+        if self.args.aug_mode == "demo":
             sim_scorer = self.args.sim_scorer
             text_embs, text_tuples = sim_scorer.create_embs_and_tuples(
                 data_list, label2role=self.args.label2role
@@ -111,7 +149,35 @@ class EeDatasetPredictor(ListDataset):
 
     def load_data(self, filename):
         ret = []
-        if "ner" == self.args.task:
+        if "tri" == self.args.task:
+            with open(filename, encoding="utf-8") as f:
+                f = f.read().strip().split("\n")
+                for d in f:
+                    d = json.loads(d)
+                    text = d["text"]
+                    text = text.replace("\n", "。")
+                    id = d["id"]
+                    event_list = d["event_list"]
+                    evt_dict = {}
+                    for tgr_idx, event in enumerate(event_list):
+                        event_type = event["event_type"]
+                        if event_type not in evt_dict:
+                            evt_dict[event_type] = [event]
+                        else:
+                            evt_dict[event_type].append(event)
+
+                    for etype, events in evt_dict.items():
+                        question = "{}事件的关键词是什么？".format(etype)
+                        ret.append(
+                            {
+                                "id": id,
+                                "text": text,
+                                "question": question,
+                                "events": events,
+                                "event_type": etype,
+                            }
+                        )
+        elif "ner" == self.args.task:
             with open(filename, encoding="utf-8") as f:
                 f = f.read().strip().split("\n")
                 for d in f:
@@ -147,7 +213,6 @@ class EeDatasetPredictor(ListDataset):
                             "augment_Ids": augment_Ids,
                         }
                     )
-
         elif "obj" == self.args.task:
             # obj直接读取list了
             pass
@@ -156,19 +221,18 @@ class EeDatasetPredictor(ListDataset):
 
 
 class EeCollatePredictor:
-    def __init__(self, max_len,  task, args):
+    def __init__(self, max_len, task, args):
         self.maxlen = max_len
         self.tokenizer = get_tokenizer(args)
         self.task = task
         self.args = args
 
     def collate_fn(self, batch):
-        batch_ner_token_ids = []
-        batch_ner_attention_mask = []
-        batch_ner_token_type_ids = []
-        batch_obj_token_ids = []
-        batch_obj_attention_mask = []
-        batch_obj_token_type_ids = []
+        batch_token_ids = []
+        batch_attention_mask = []
+        batch_token_type_ids = []
+        batch_text_bias = []
+        batch_event_type = []
         batch_argu_roles = []  # 用于构建提交文件
         batch_raw_tokens = []  # 用于构建输出
         batch_text_ids = []  # 用于构建提交文件
@@ -193,11 +257,31 @@ class EeCollatePredictor:
                 ner_token_type_ids = encode_dict["token_type_ids"]
                 ner_attention_mask = encode_dict["attention_mask"]
 
-                batch_ner_token_ids.append(ner_token_ids)
-                batch_ner_attention_mask.append(ner_attention_mask)
-                batch_ner_token_type_ids.append(ner_token_type_ids)
+                batch_token_ids.append(ner_token_ids)
+                batch_attention_mask.append(ner_attention_mask)
+                batch_token_type_ids.append(ner_token_type_ids)
                 batch_raw_tokens.append(tokens)
                 batch_text_ids.append(ids)
+
+            elif "tri" == self.task:
+                tokens = data["tri_tokens"]
+                ids = data["text_id"]
+                encode_dict = self.tokenizer.encode_plus(
+                    text=tokens,
+                    max_length=self.args.max_seq_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_token_type_ids=True,
+                    return_attention_mask=True,
+                )
+
+                batch_token_ids.append(encode_dict["input_ids"])
+                batch_attention_mask.append(encode_dict["attention_mask"])
+                batch_token_type_ids.append(encode_dict["token_type_ids"])
+                batch_raw_tokens.append(tokens)
+                batch_text_ids.append(ids)
+                batch_text_bias.append(data['text_bias'])
+                batch_event_type.append(data['event_type'])
 
             elif "obj" == self.task:
                 obj_tokens = data["obj_tokens"]
@@ -218,9 +302,9 @@ class EeCollatePredictor:
                 else:
                     obj_attention_mask = [1] * self.maxlen
 
-                batch_obj_token_ids.append(obj_tokens)
-                batch_obj_attention_mask.append(obj_attention_mask)
-                batch_obj_token_type_ids.append(obj_token_type_ids)
+                batch_token_ids.append(obj_tokens)
+                batch_attention_mask.append(obj_attention_mask)
+                batch_token_type_ids.append(obj_token_type_ids)
                 batch_raw_tokens.append(raw_tokens)
                 batch_argu_roles.append(role)
                 batch_text_ids.append(event_id)
@@ -228,39 +312,43 @@ class EeCollatePredictor:
         res = {}
 
         if "ner" == self.task:
-            try:
-                batch_ner_token_ids = convert_list_to_tensor(batch_ner_token_ids)
-                batch_ner_attention_mask = convert_list_to_tensor(
-                    batch_ner_attention_mask
-                )
-                batch_ner_token_type_ids = convert_list_to_tensor(
-                    batch_ner_token_type_ids
-                )
-            except Exception as e:
-                logging.info(e)
-                logging.info(batch_ner_token_ids)
-                for i in batch_ner_token_ids:
-                    logging.info(len(i))
-                    logging.info(isinstance(i, list))
-                exit(0)
+            batch_token_ids = convert_list_to_tensor(batch_token_ids)
+            batch_attention_mask = convert_list_to_tensor(batch_attention_mask)
+            batch_token_type_ids = convert_list_to_tensor(batch_token_type_ids)
 
             ner_res = {
-                "ner_input_ids": batch_ner_token_ids,
-                "ner_attention_mask": batch_ner_attention_mask,
-                "ner_token_type_ids": batch_ner_token_type_ids,
+                "ner_input_ids": batch_token_ids,
+                "ner_attention_mask": batch_attention_mask,
+                "ner_token_type_ids": batch_token_type_ids,
             }
 
             res = ner_res
 
-        elif "obj" == self.task:
-            batch_obj_token_ids = convert_list_to_tensor(batch_obj_token_ids)
-            batch_obj_attention_mask = convert_list_to_tensor(batch_obj_attention_mask)
-            batch_obj_token_type_ids = convert_list_to_tensor(batch_obj_token_type_ids)
+        elif "tri" == self.task:
+            ### 因为tri用的是和obj相同的网络结构
+            batch_token_ids = convert_list_to_tensor(batch_token_ids)
+            batch_attention_mask = convert_list_to_tensor(batch_attention_mask)
+            batch_token_type_ids = convert_list_to_tensor(batch_token_type_ids)
 
             sbj_obj_res = {
-                "re_obj_input_ids": batch_obj_token_ids,
-                "re_obj_attention_mask": batch_obj_attention_mask,
-                "re_obj_token_type_ids": batch_obj_token_type_ids,
+                "re_obj_input_ids": batch_token_ids,
+                "re_obj_attention_mask": batch_attention_mask,
+                "re_obj_token_type_ids": batch_token_type_ids,
+                "event_types":batch_event_type,
+                "text_bias":batch_text_bias
+            }
+
+            res = sbj_obj_res
+
+        elif "obj" == self.task:
+            batch_token_ids = convert_list_to_tensor(batch_token_ids)
+            batch_attention_mask = convert_list_to_tensor(batch_attention_mask)
+            batch_token_type_ids = convert_list_to_tensor(batch_token_type_ids)
+
+            sbj_obj_res = {
+                "re_obj_input_ids": batch_token_ids,
+                "re_obj_attention_mask": batch_attention_mask,
+                "re_obj_token_type_ids": batch_token_type_ids,
                 "argu_roles": batch_argu_roles,
             }
 

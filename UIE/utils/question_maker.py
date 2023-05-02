@@ -37,26 +37,29 @@ def create_role_tuple(data):
         trigger = event["trigger"]
         role_dict = {}
         for aru_idx, argument in enumerate(event["arguments"]):
-            role = argument["role"]
-            if role not in role_dict:
-                role_dict[role] = [argument]
+            key = event_type+':'+argument["role"]
+            if key not in role_dict:
+                role_dict[key] = [argument]
             else:
-                role_dict[role].append(argument)
+                role_dict[key].append(argument)
 
-        for role, arguments in role_dict.items():
-            question = get_question_for_argument(event_type=event_type, role=role)
-            concat_texts.append("事件类型是%s,%s,事件触发词是%s" % (event_type, question, trigger))
-            tuples.append(
-                {
-                    "text": text,
-                    "trigger": trigger,
-                    "question": question,
-                    "trigger_start_index": event["trigger_start_index"],
-                    "arguments": arguments,
-                    "role": role,
-                    "event_type": event["event_type"],
-                }
-            )
+    for key, arguments in role_dict.items():
+        event_type = key.split(':')[0]
+        role = key.split(':')[1]
+        question = get_question_for_argument(event_type=event_type, role=role)
+        # concat_texts.append("事件类型是%s,%s,事件触发词是%s" % (event_type, question, trigger))
+        concat_texts.append("事件类型%s,论元角色%s,文本长度%d" % (event_type, role, len(text)))
+        tuples.append(
+            {
+                "text": text,
+                # "trigger": trigger,
+                "question": question,
+                # "trigger_start_index": event["trigger_start_index"],
+                "arguments": arguments,
+                "role": role,
+                "event_type": event_type,
+            }
+        )
     return tuples, concat_texts
 
 
@@ -101,10 +104,10 @@ def create_role_tuple_for_predict(data_list, label2role):
     tuples, concat_texts = [], []
     for tgr_idx, event in enumerate(data_list):
         event_type = event["event_type"]
-        trigger = event["trigger"]
+        trigger = event["trigger"] if "trigger" in event else None
         argu_types = label2role[event_type]
         textb = event["text"]
-        trigger_start_index = event["trigger_start_index"]
+        trigger_start_index = event["trigger_start_index"] if trigger_start_index in event else None
         event_id = event["event_id"]
         for role in argu_types:
             # 组织行为-游行_时间
@@ -121,25 +124,42 @@ def create_role_tuple_for_predict(data_list, label2role):
                 "event_type": event_type,
                 "event_id": event_id,
             }
-            concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (q, trigger, len(textb)))
+            if trigger is not None:
+                concat_texts.append("%s，事件触发词是%s，文本长度是%d" % (q, trigger, len(textb)))
+            else:
+                concat_texts.append("%s，文本长度是%d" % (q, len(textb)))
             tuples.append(text_tuple)
     return tuples, concat_texts
 
+
+# def get_question_for_verify(event_type, role):
+#     complete_slot_str = event_type + "-" + role
+#     query_str = argument2question.get(complete_slot_str)
+#     event_type_str = event_type.split("-")[-1]
+#     if query_str.__contains__("？"):
+#         query_str = query_str.replace("？", "")
+#     if query_str == role:
+#         query_str_final = "前文包含{}事件中的{}吗？".format(event_type_str, role)
+#     elif role == "时间":
+#         query_str_final = "前文包含{}{}吗？".format(event_type_str, query_str)
+#     else:
+#         query_str_final = "前文包含{}事件中的{},包括{}吗？".format(event_type_str, role, query_str)
+#     return query_str_final
 
 def get_question_for_verify(event_type, role):
     complete_slot_str = event_type + "-" + role
     query_str = argument2question.get(complete_slot_str)
     event_type_str = event_type.split("-")[-1]
     if query_str.__contains__("？"):
-        query_str = query_str.replace("？", "")
+        query_str = query_str.replace("？","")
     if query_str == role:
-        query_str_final = "前文包含{}事件中的{}吗？".format(event_type_str, role)
+        query_str_final = "{}事件的{}".format(event_type_str, role)
     elif role == "时间":
-        query_str_final = "前文包含{}{}吗？".format(event_type_str, query_str)
+        query_str_final = "{} {}".format(event_type_str, query_str)
     else:
-        query_str_final = "前文包含{}事件中的{},包括{}吗？".format(event_type_str, role, query_str)
+        query_str_final = "{}事件的{},比如{}".format(
+            event_type_str, role, query_str)
     return query_str_final
-
 
 def get_question_for_argument(event_type, role):
     complete_slot_str = event_type + "-" + role
@@ -153,34 +173,69 @@ def get_question_for_argument(event_type, role):
         query_str_final = "找到{}{}".format(event_type_str, query_str)
     else:
         query_str_final = "找到{}事件中的{},包括{}".format(event_type_str, role, query_str)
+    # query_str_final = " unused9 " + query_str_final + " unused10 "
     return query_str_final
 
+# def get_question_for_argument(event_type, role):
+#     complete_slot_str = event_type + "-" + role
+#     query_str = argument2question.get(complete_slot_str)
+#     event_type_str = event_type.split("-")[-1]
+#     if query_str.__contains__("？"):
+#         query_str_final = query_str
+#     if query_str == role:
+#         query_str_final = "{}的{}".format(event_type_str, role)
+#     elif role == "时间":
+#         query_str_final = "{}{}".format(event_type_str, query_str)
+#     else:
+#         query_str_final = "{}的{},包括{}".format(event_type_str, role, query_str)
+#     query_str_final = " unused9 " + query_str_final + " unused10 "
+#     return query_str_final
 
 def creat_demo(sim_tuple):
     """
     从sim_tuple中提取相关信息，并插入特殊占位符，包括[TGR] ，[ARG]，[DEMO]
     """
-    sim_trigger = sim_tuple["trigger"]
-    sim_trigger_start_index = sim_tuple["trigger_start_index"]
-    sim_text_tokens = [i for i in sim_tuple["text"]]
-    sim_text_tokens.insert(sim_trigger_start_index, "[TGR]")
-    sim_text_tokens.insert(sim_trigger_start_index + 1 + len(sim_trigger), "[TGR]")
+    # sim_trigger = sim_tuple["trigger"]
+    # sim_trigger_start_index = sim_tuple["trigger_start_index"]
+    # sim_text_tokens = [i for i in sim_tuple["text"]]
+    # sim_text_tokens.insert(sim_trigger_start_index, "[TGR]")
+    # sim_text_tokens.insert(sim_trigger_start_index + 1 + len(sim_trigger), "[TGR]")
 
-    answers = []
-    for argu in sim_tuple["arguments"][:3]:
-        answers.append("[ARG]")
-        answers.append(argu["argument"])
+    # answers = []
+    # for argu in sim_tuple["arguments"][:3]:
+    #     answers.append("[ARG]")
+    #     answers.append(argu["argument"])
 
-    demo = (
-        ["[DEMO]"]
-        + [i for i in sim_tuple["question"]]
-        + ["[SEP]"]
-        + sim_text_tokens
-        + ["[SEP]", "答案是："]
-        + answers
-        + ["[DEMO]"]
-    )
+    # demo = (
+    #     ["[DEMO]"]
+    #     + [i for i in sim_tuple["question"]]
+    #     + ["[SEP]"]
+    #     + sim_text_tokens
+    #     + ["[SEP]", "答案是："]
+    #     + answers
+    #     + ["[DEMO]"]
+    # )
 
+    demo = [i for i in sim_tuple["text"]]
+    insert_indexes = []
+    for argu in sim_tuple["arguments"]:
+        insert_indexes.append({
+            'argument_start_index':argu['argument_start_index'],
+            'length':len(argu['argument'])
+        })
+
+    insert_indexes.sort(key=lambda x: x['argument_start_index'])
+    for i in range(len(insert_indexes)):
+        insert_indexes[i]['argument_start_index'] = insert_indexes[i]['argument_start_index']  + i*2 ## 需要插入2个特殊标签[ARG]
+
+    for argu in insert_indexes:
+        index = argu['argument_start_index']
+        length = argu['length']
+        demo.insert(index,'[ARG]')
+        demo.insert(index+length+1,'[ARG]')
+    # if len(insert_indexes) >=2 :
+    #     print(demo)
+    #     exit(0)
     return demo
 
 
@@ -189,31 +244,30 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
     argu_end_labels = [0] * len(argu_token)
 
     # 因为text中多加了[TGR]
-    trigger = text_tuple["trigger"]
-    trigger_start_index = text_tuple["trigger_start_index"]
+    # trigger = text_tuple["trigger"]
+    # trigger_start_index = text_tuple["trigger_start_index"]
     ## 用于计算应该给argument_start_index加多少偏置
     question = text_tuple["question"]
-
+    question = [i for i in question if i != ' ']
     # 计算文本的偏置pre_tokens，用于构造label
     if demo is not None:
-        pre_tokens = demo + [i for i in question]
+        pre_tokens = ["[CLS]"] + question + ["[SEP]"] + demo + ["[SEP]"]
     else:
-        pre_tokens = [i for i in question]
-    pre_tokens = ["[CLS]"] + pre_tokens + ["[SEP]"]
+        pre_tokens = ["[CLS]"] + question + ["[SEP]"]
 
     # 用于增加对arg的偏置
-    tgr1_index = trigger_start_index
-    tgr2_index = trigger_start_index + 1 + len(trigger)
+    # tgr1_index = trigger_start_index
+    # tgr2_index = trigger_start_index + 1 + len(trigger)
 
     ## 用于计算所有事件论的起止位置
     argu_tuples = []
     for argu in text_tuple["arguments"]:
         argument_start_index = argu["argument_start_index"]
         argument_text = argu["argument"]
-        if tgr1_index <= argument_start_index:
-            argument_start_index += 1
-        if tgr2_index <= argument_start_index:
-            argument_start_index += 1
+        # if tgr1_index <= argument_start_index:
+        #     argument_start_index += 1
+        # if tgr2_index <= argument_start_index:
+        #     argument_start_index += 1
 
         ## 注意-1
         argu_start = len(pre_tokens) + argument_start_index
@@ -230,21 +284,25 @@ def creat_argu_labels(argu_token, demo, text_tuple, max_len):
 
 def creat_argu_token(text_tuple, demo, max_len):
     question = text_tuple["question"]
+    
     text = text_tuple["text"]
-    trigger = text_tuple["trigger"]
-    trigger_start_index = text_tuple["trigger_start_index"]
+    # trigger = text_tuple["trigger"]
+    # trigger_start_index = text_tuple["trigger_start_index"]
     text_tokens = [i for i in text]
     # 用于增加对arg的偏置
-    tgr1_index = trigger_start_index
-    tgr2_index = trigger_start_index + 1 + len(trigger)
-    text_tokens.insert(tgr1_index, "[TGR]")
-    text_tokens.insert(tgr2_index, "[TGR]")
+    # tgr1_index = trigger_start_index
+    # tgr2_index = trigger_start_index + 1 + len(trigger)
+    # text_tokens.insert(tgr1_index, "[TGR]")
+    # text_tokens.insert(tgr2_index, "[TGR]")
 
     # 适应拼接或者不拼接的状态
+
+    question = [i for i in question if i != ' ']
+
     if demo is not None:
-        pre_tokens = demo + [i for i in question] + ["[SEP]"]
+        pre_tokens = question + ["[SEP]"] + demo + ["[SEP]"]
     else:
-        pre_tokens = [i for i in question] + ["[SEP]"]
+        pre_tokens = question + ["[SEP]"]
 
     if len(text_tokens) + len(pre_tokens) > max_len - 2:
         argu_token = (pre_tokens + text_tokens)[: max_len - 2]
@@ -254,7 +312,8 @@ def creat_argu_token(text_tuple, demo, max_len):
     # 首尾补充特殊字符
     argu_token = ["[CLS]"] + argu_token + ["[SEP]"]
     token_type_ids = [0] * len(argu_token)  # [CLS] +　pre_tokens
-
+    # print(argu_token)
+    # exit(0)
     return argu_token, token_type_ids
 
 
