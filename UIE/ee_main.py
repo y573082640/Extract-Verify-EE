@@ -332,7 +332,7 @@ class EePipeline:
             s_logits, e_logits, argu_tuples, masks, raw_tokens
         ):
             length = sum(mask)
-            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.5)
+            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.45)
             true_entities = {"答案": argu_tuple}
 
             # print("========================")
@@ -887,10 +887,10 @@ if __name__ == "__main__":
     args = EeArgs(
         "obj",
         log=True,
-        aug_mode=None,
+        aug_mode='demo',
         model="roberta",
-        output_name="【论元抽取】多论元合并"
-        # weight_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_None_没有触发词_best.pt"
+        output_name="testtest"
+        # weight_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_None_【论元抽取】多论元合并.pt"
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)

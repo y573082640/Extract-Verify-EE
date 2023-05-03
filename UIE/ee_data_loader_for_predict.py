@@ -41,11 +41,11 @@ class EeDatasetPredictor(ListDataset):
             augment_Ids = []
 
         tri_data = {
-            "text_id":data['id'],
+            "text_id": data["id"],
             "tri_tokens": concat_token,
             "augment_Ids": augment_Ids,
-            "event_type": data['event_type'],
-            "text_bias":len(pre_tokens) 
+            "event_type": data["event_type"],
+            "text_bias": len(pre_tokens),
         }
 
         return tri_data
@@ -61,24 +61,22 @@ class EeDatasetPredictor(ListDataset):
         event = {
             "event_type":e_type,
             'text':text,
-            'trigger':trg_tuple[0],
-            'trigger_start_index':trg_tuple[1],
+            'trigger':trg_tuple[0], # 可能为None
+            'trigger_start_index':trg_tuple[1], #可能为None
             'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
         }
         """
         ret = []
         if self.args.aug_mode == "demo":
             sim_scorer = self.args.sim_scorer
-            text_embs, text_tuples = sim_scorer.create_embs_and_tuples(
+            text_embs, text_tuples = sim_scorer.create_embs_and_tuples_for_obj_predict(
                 data_list, label2role=self.args.label2role
             )
             demo_embs = self.args.demo_embs
             demo_tuples = self.args.demo_tuples
-            most_sim = sim_scorer.sim_match(
-                text_embs, demo_embs, rank=0
-            )  # {corpus_id,score} rank表示取最相似的还是次相似的
+            most_sim = sim_scorer.sim_match(text_embs, demo_embs, ignore_first=False)
             for idx, text_tuple in enumerate(text_tuples):
-                sim_id = most_sim[idx]["corpus_id"]
+                sim_id = most_sim[idx][0]
                 demo = creat_demo(demo_tuples[sim_id])
                 obj_tokens, token_type_ids = creat_argu_token(
                     text_tuple, demo, self.args.max_seq_len
@@ -113,7 +111,7 @@ class EeDatasetPredictor(ListDataset):
             text_tuples, _ = create_role_tuple_for_predict(
                 data_list, label2role=self.args.label2role
             )
-            logging.info(text_tuples)
+            # logging.debug(text_tuples)
             for idx, text_tuple in enumerate(text_tuples):
                 obj_tokens, token_type_ids = creat_argu_token(
                     text_tuple, None, self.args.max_seq_len
@@ -146,7 +144,7 @@ class EeDatasetPredictor(ListDataset):
                 )
 
         logging.info("data_list数据预处理完成")
-        logging.info(ret)
+        # logging.debug(ret)
         return ret
 
     def load_data(self, filename):
@@ -282,8 +280,8 @@ class EeCollatePredictor:
                 batch_token_type_ids.append(encode_dict["token_type_ids"])
                 batch_raw_tokens.append(tokens)
                 batch_text_ids.append(ids)
-                batch_text_bias.append(data['text_bias'])
-                batch_event_type.append(data['event_type'])
+                batch_text_bias.append(data["text_bias"])
+                batch_event_type.append(data["event_type"])
 
             elif "obj" == self.task:
                 obj_tokens = data["obj_tokens"]
@@ -336,8 +334,8 @@ class EeCollatePredictor:
                 "re_obj_input_ids": batch_token_ids,
                 "re_obj_attention_mask": batch_attention_mask,
                 "re_obj_token_type_ids": batch_token_type_ids,
-                "event_types":batch_event_type,
-                "text_bias":batch_text_bias
+                "event_types": batch_event_type,
+                "text_bias": batch_text_bias,
             }
 
             res = sbj_obj_res

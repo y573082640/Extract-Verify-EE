@@ -17,13 +17,13 @@ def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids,
     ret = []
     for s_logit, e_logit, mask, text, e_id, role in zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles):
         length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.1)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.45)
         values = pred_entities["答案"]
         # logging.info(values)
         for v in values:
             start = v[0]  ## 文本中包含了开头结尾的CLS和SEP，不需要-1
             end = v[1]
-            ans = "".join(text[start:end]).replace("[TGR]", "")
+            ans = "".join(text[start:end]).replace("[TGR]", "").replace("[SEP]", "")
             if ans != "":
                 ret.append({
                     'role': role,
