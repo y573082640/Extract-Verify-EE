@@ -660,6 +660,7 @@ def main():
             f1 = 2.0*recall*precision/(precision+recall)
             with open('/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/tri wrong.txt','a') as fp:
                 fp.write(str("{} {} {}".format(precision,recall,f1)))
+                fp.write('\n')
             ### 只关注有的部分
             return {'precision':f1}
 

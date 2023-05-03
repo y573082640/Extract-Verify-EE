@@ -104,6 +104,44 @@ class Predictor:
                     argu_list.append(event)
 
         return argu_list
+    
+    def decode_eventType_to_obj(self, ner_result):
+        '''
+            适用于没有事件触发词的输入
+            input : 
+            {"text":"7月17日至8月29日，28个交易日内公司股价暴涨312%，吸引了大批投资者的眼球。",
+            "id":"2ec92c3e0530b2c8e15604507deafa92",
+            "event_list":[{"event_type":"财经/交易-涨价"}]
+            }
+
+            output :
+            event = {
+                "event_type":e_type,
+                'text':text,
+                'trigger':trg_tuple[0],
+                'trigger_start_index':trg_tuple[1],
+                'event_id':text_id+"——"+str(i), # 聚合事件论元 和 聚合事件列表
+            }
+        
+        '''
+        # {"灾害/意外-坍/垮塌": [('坍塌', 7)], "人生-失联": [('失联', 17)]}
+        argu_list = []
+        for res in ner_result:
+            # {'event_dict': {'交往-道歉': [(['致', '歉'], 3)]}, 'text_id': '5aec...'}
+            text_id = res['id']
+            text = res['text']
+            for evt in res['event_list']:
+                event = {
+                    "event_type": evt['event_type'],
+                    'text': text,
+                    'trigger': None,
+                    'trigger_start_index': None,
+                    # 聚合事件论元 和 聚合事件列表
+                    'event_id': text_id + "——" + evt['event_type'] + str(0), ## 只有一个事件，全部合并
+                    'text_id': text_id
+                }
+                argu_list.append(event)
+        return argu_list
 
     def _create_verified_dataset(self, argu_input, obj_result):
         dataset = []
@@ -129,7 +167,7 @@ class Predictor:
             e = evt[argu['event_id']]
             merged_object = {**e, **argu} # 构建对应论元的问题
             dataset.append(map_fn(merged_object,mode='exist'))
-
+        # print(dataset)
         return evt_role,dataset
 
     def accumulate_answer(self, argu_input, obj_result):
@@ -192,27 +230,29 @@ class Predictor:
         )
 
         for batch_data in tqdm.tqdm(data_loader):
-            result = unmasker(batch_data, targets=['不', '是'])
+            # result = unmasker(batch_data, targets=['不', '是']) 
+            result = unmasker(batch_data, targets=['有', '没'])
             # append the result to the list
             results.extend(result)
 
         ret = []
         for i, result in enumerate(results):
-            if result[0]['token_str'] == '是':
+            if result[0]['token_str'] == '有':
                 ret += evt_role[i]
         return ret
 
     def joint_predict(self, filepath, output, no_trigger=False, input_event_type=None):
         st = time()
         if no_trigger and input_event_type:
-            argu_input = []
-            with open('input_event_type','r') as fp:
+            type_results = []
+            with open(input_event_type,'r') as fp:
                 for line in fp:
-                    argu_input.append(json.loads(line))
+                    type_results.append(json.loads(line))
+            argu_input = self.decode_eventType_to_obj(type_results)
         else:
-            ner_result = self.predict_ner(filepath)
-            argu_input = self.decode_ner_to_obj(ner_result)
-
+            type_results = self.predict_ner(filepath)
+            argu_input = self.decode_ner_to_obj(type_results)
+        # logging.info(argu_input)
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
@@ -224,7 +264,7 @@ class Predictor:
 
         ### 暂时保存中间输出用于分析
         with open(name_with_date('ner_result'), 'w') as fp:
-            for a in ner_result:
+            for a in type_results:
                 json.dump(a, fp, ensure_ascii=False, separators=(',', ':'))
                 fp.write('\n')
         with open(name_with_date('obj_result'), 'w') as fp:
@@ -250,14 +290,14 @@ class Predictor:
 
 check_base = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/'
 ner_path = check_base + 'ner_duee_roberta_no_lexicon_len256_bs32.pt'
-obj_path = check_base + 'obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt'
+obj_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt'
 tri_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/tri_duee_roberta_None_trigger_extraction_noneAug.pt"
 if __name__ == "__main__":
-    ner_args = EeArgs('tri', use_lexicon=False, log=True, weight_path=tri_path)
-    obj_args = EeArgs('obj', log=False, weight_path=obj_path)
+    ner_args = EeArgs('ner', log=True, weight_path=ner_path)
+    obj_args = EeArgs('obj', log=True, weight_path=obj_path)
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/event_detection_result.json'
-    output_path = name_with_date('output')
-    predict_tool.joint_predict(t_path, output_path,no_trigger=True,input_event_type="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/event_detection_9575.json")
+    t_path = 'data/ee/event_type/event_detection_1.json'
+    output_path = name_with_date('测试dev')
+    predict_tool.joint_predict(None, output_path,no_trigger=True,input_event_type=t_path)
 
 

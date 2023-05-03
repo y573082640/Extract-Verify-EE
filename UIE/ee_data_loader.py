@@ -213,6 +213,7 @@ class EeDataset(ListDataset):
             "argu_tuples": argu_tuples,
             "sim_id": sim_id,
         }
+        # logging.info(role_tuple)
         # logging.info(argu_data)
         return argu_data
 

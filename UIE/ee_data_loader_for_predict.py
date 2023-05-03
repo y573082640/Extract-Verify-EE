@@ -113,6 +113,7 @@ class EeDatasetPredictor(ListDataset):
             text_tuples, _ = create_role_tuple_for_predict(
                 data_list, label2role=self.args.label2role
             )
+            logging.info(text_tuples)
             for idx, text_tuple in enumerate(text_tuples):
                 obj_tokens, token_type_ids = creat_argu_token(
                     text_tuple, None, self.args.max_seq_len
@@ -145,6 +146,7 @@ class EeDatasetPredictor(ListDataset):
                 )
 
         logging.info("data_list数据预处理完成")
+        logging.info(ret)
         return ret
 
     def load_data(self, filename):

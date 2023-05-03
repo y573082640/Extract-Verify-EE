@@ -32,10 +32,10 @@ def create_role_tuple(data):
     concat_texts = []
     text = data["text"]
     event_list = data["event_list"]
+    role_dict = {}
     for tgr_idx, event in enumerate(event_list):
         event_type = event["event_type"]
         trigger = event["trigger"]
-        role_dict = {}
         for aru_idx, argument in enumerate(event["arguments"]):
             key = event_type+':'+argument["role"]
             if key not in role_dict:
@@ -107,7 +107,7 @@ def create_role_tuple_for_predict(data_list, label2role):
         trigger = event["trigger"] if "trigger" in event else None
         argu_types = label2role[event_type]
         textb = event["text"]
-        trigger_start_index = event["trigger_start_index"] if trigger_start_index in event else None
+        trigger_start_index = event["trigger_start_index"] if 'trigger_start_index' in event else None
         event_id = event["event_id"]
         for role in argu_types:
             # 组织行为-游行_时间

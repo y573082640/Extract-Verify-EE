@@ -19,6 +19,7 @@ def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids,
         length = sum(mask)
         pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.1)
         values = pred_entities["答案"]
+        # logging.info(values)
         for v in values:
             start = v[0]  ## 文本中包含了开头结尾的CLS和SEP，不需要-1
             end = v[1]
@@ -188,8 +189,8 @@ def bj_decode(start_logits, end_logits, length, id2label, bound=0.45):
     predict_entities = {x: [] for x in list(id2label.values())}
     start_pred = np.where(sigmoid(start_logits) > bound, 1, 0)
     end_pred = np.where(sigmoid(end_logits) > bound, 1, 0)
-    # print(start_pred)
-    # print(end_pred)
+    # logging.info(start_pred)
+    # logging.info(end_pred)
     for i, s_type in enumerate(start_pred):
         if s_type == 0:
             continue

@@ -190,4 +190,5 @@ if __name__ == '__main__':
     path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json'
     out = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/tmp.json"
     bio_pred = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/storage/bio_pred.json"
-    ret = trigger_predict(file=path,output="log/event_detection_9575.txt",batch_size=32,model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta 9575")
+    # ret = trigger_predict(file=dev,output="log/event_detection_dev.txt",batch_size=32,model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta 9575")
+    trigger_eval_file(input_file='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/event_type/event_detection_dev.txt',label_file=dev)
