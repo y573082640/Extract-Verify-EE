@@ -40,28 +40,28 @@ def lcs(A, B):
 def calculate_metric(predict, gt, text=None):
 
     tp, fp, fn = 0, 0, 0
-    # for entity_predict in predict:
-    #     flag = 0
-    #     for entity_gt in gt:
-    #         # pred_entities[_type] = [(start_index,end_index+1)...]
-    #         # 要保证首尾一致吗？
-    #         # 起点=起点，终点=终点
-    #         if entity_predict[0] == entity_gt[0] and entity_predict[1] == entity_gt[1]:
-    #             flag = 1
-    #             tp += 1
-    #             break
-    #     if flag == 0:
-    #         fp += 1
+    for entity_predict in predict:
+        flag = 0
+        for entity_gt in gt:
+            # pred_entities[_type] = [(start_index,end_index+1)...]
+            # 要保证首尾一致吗？
+            # 起点=起点，终点=终点
+            if entity_predict[0] == entity_gt[0] and entity_predict[1] == entity_gt[1]:
+                flag = 1
+                tp += 1
+                break
+        if flag == 0:
+            fp += 1
 
-    # fn = len(gt) - tp
-    if len(predict) > 0 and len(gt) > 0:
-        tp, fp, fn = 1,0,0
-    elif len(predict) == 0 and len(gt) > 0:
-        tp, fp, fn = 0,0,1
-    elif len(predict) > 0 and len(gt) == 0:
-        tp, fp, fn = 0,1,0
-    elif len(predict) == 0 and len(gt) == 0:
-        tp, fp, fn = 0,0,0
+    fn = len(gt) - tp
+    # if len(predict) > 0 and len(gt) > 0:
+    #     tp, fp, fn = 1,0,0
+    # elif len(predict) == 0 and len(gt) > 0:
+    #     tp, fp, fn = 0,0,1
+    # elif len(predict) > 0 and len(gt) == 0:
+    #     tp, fp, fn = 0,1,0
+    # elif len(predict) == 0 and len(gt) == 0:
+    #     tp, fp, fn = 0,0,0
     return np.array([tp, fp, fn])
 
 def word_level_calculate_metric(predict, gt, text):

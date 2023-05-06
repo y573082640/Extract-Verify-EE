@@ -16,7 +16,10 @@ import logging
 from time import time
 from torch.utils.data import DataLoader, RandomSampler
 from UIE.ee_data_loader import EeDataset, EeCollate
-from utils.question_maker import get_question_for_verify
+from utils.question_maker import (
+    get_question_for_verify,
+    get_question_for_verify_trigger,
+)
 from UIE.ee_postprocessing import remove_duplicates
 from torch.utils.data import DataLoader, Dataset
 
@@ -45,15 +48,15 @@ def name_with_date(name):
 def map_fn(example, mode="correct"):
     # 在文本中插入sptgr特殊标志
     text = example["text"]
-    # trigger_start_index = example['trigger_start_index']
-    # trigger = example['trigger']
     text_tokens = [b for b in text]
-    # tgr1_index = trigger_start_index
-    # tgr2_index = trigger_start_index + 1 + len(trigger)
-    # text_tokens.insert(tgr1_index, '[TGR]')
-    # text_tokens.insert(tgr2_index, '[TGR]')
-    # if not text_tokens[-1] == '。':
-    #     text_tokens.append("。")
+
+    if "trigger_start_index" in example:
+        trigger_start_index = example["trigger_start_index"]
+        trigger = example["trigger"]
+        tgr1_index = trigger_start_index
+        tgr2_index = trigger_start_index + 1 + len(trigger)
+        text_tokens.insert(tgr1_index, " [TGR] ")
+        text_tokens.insert(tgr2_index, " [TGR] ")
 
     text_tokens = "".join(text_tokens)
     # 构建问题和回答
@@ -65,13 +68,13 @@ def map_fn(example, mode="correct"):
         que_str = "[SEP]问题：" + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
     elif mode == "exist":
         que_str = get_question_for_verify(example["event_type"], example["role"])
-        # que_str = '[SEP]问题：' + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
         que_str = "[SEP] [MASK] " + que_str
     else:
         raise AttributeError("提供的mode应该为exist 或者 correct")
 
     most_len = 512 - 2 - len(que_str)  ### [CLS] + [SEP]
     v_tokens = text_tokens[:most_len] + que_str
+    # logging.info(v_tokens)
     return v_tokens
 
 
@@ -140,8 +143,6 @@ class Predictor:
                 event = {
                     "event_type": evt["event_type"],
                     "text": text,
-                    "trigger": None,
-                    "trigger_start_index": None,
                     # 聚合事件论元 和 聚合事件列表
                     "event_id": text_id
                     + "——"
@@ -176,7 +177,7 @@ class Predictor:
             e = evt[argu["event_id"]]
             merged_object = {**e, **argu}  # 构建对应论元的问题
             dataset.append(map_fn(merged_object, mode="exist"))
-        # print(dataset)
+        # logging.info(dataset)
         return evt_role, dataset
 
     def accumulate_answer(self, argu_input, obj_result):
@@ -218,8 +219,9 @@ class Predictor:
         self,
         argu_input,
         obj_result,
+        no_trigger=True,
         batch_size=64,
-        model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_exist_roberta 9375",
+        model_path="checkpoints/ee/mlm_exist_roberta_9277",
     ):
         evt_role, datas = self._create_verified_dataset(argu_input, obj_result)
         # load your model and tokenizer from a local directory or a URL
@@ -239,8 +241,7 @@ class Predictor:
         )
 
         for batch_data in tqdm.tqdm(data_loader):
-            # result = unmasker(batch_data, targets=['不', '是'])
-            result = unmasker(batch_data, targets=["有", "没"])
+            result = unmasker(batch_data, targets=["有", "无"])
             # append the result to the list
             results.extend(result)
 
@@ -266,26 +267,44 @@ class Predictor:
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
         logging.info("...进行验证过滤")
-        verified_result = self.verify_result(argu_input, obj_result)
+        if no_trigger:
+            verified_result = self.verify_result(argu_input, obj_result)
+        else:
+            verified_result = self.verify_result(
+                argu_input,
+                obj_result,
+                model_path="checkpoints/ee/mlm_exist_roberta_trg",
+            )
         torch.cuda.empty_cache()
         logging.info("...转换为评测需要的形式...")
         answer = self.accumulate_answer(argu_input, verified_result)
+        answer_no_verified = self.accumulate_answer(argu_input, obj_result)
 
-        ### 暂时保存中间输出用于分析
-        with open(name_with_date("ner_result"), "w") as fp:
-            for a in type_results:
+        # ### 暂时保存中间输出用于分析
+        # with open(name_with_date("ner_result"), "w") as fp:
+        #     for a in type_results:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
+        #         fp.write("\n")
+        # with open(name_wit
+        # h_date("obj_result"), "w") as fp:
+        #     for a in obj_result:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
+        #         fp.write("\n")
+        # with open(name_with_date("verified_result"), "w") as fp:
+        #     for a in answer:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
+        #         fp.write("\n")
+        # ##
+        # 暂时保存中间输出用于分析
+        with open(name_with_date("answer_no_verified_no_tgr"), "w") as fp:
+            for a in answer_no_verified:
                 json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
                 fp.write("\n")
-        with open(name_with_date("obj_result"), "w") as fp:
-            for a in obj_result:
-                json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
-                fp.write("\n")
-        with open(name_with_date("verified_result"), "w") as fp:
+        with open(name_with_date("answer_no_remove_no_tgr"), "w") as fp:
             for a in answer:
                 json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
                 fp.write("\n")
-        ##
-
+        #
         logging.info("...后处理...")
         answer = remove_duplicates(answer)
         logging.info("...预测结果输入文件:" + str(output))
@@ -302,14 +321,23 @@ check_base = (
     "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
 )
 ner_path = check_base + "ner_duee_roberta_no_lexicon_len256_bs32.pt"
-obj_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_demo_【论元抽取】多论元合并 + DEMO.pt"
-tri_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/tri_duee_roberta_None_trigger_extraction_noneAug.pt"
+no_trigger_obj_path = check_base + "obj_duee_roberta_None_【论元抽取】多论元合并 No DEMO sample4.pt"
+obj_path = check_base + "obj_duee_roberta_merge_noRandom_decode=0.5_512_32_sample1.pt"
+tri_path = check_base + "tri_duee_roberta_None_trigger_extraction_noneAug.pt"
 if __name__ == "__main__":
-    ner_args = EeArgs("ner", log=True, weight_path=ner_path)
-    obj_args = EeArgs("obj", log=False, aug_mode="demo", weight_path=obj_path)
+    ner_args = EeArgs(
+        "ner", log=True, add_trigger=True, aug_mode=None, weight_path=ner_path
+    )
+    obj_args = EeArgs(
+        "obj", log=False, add_trigger=True, aug_mode=None, weight_path=obj_path
+    )
     predict_tool = Predictor(ner_args, obj_args)
-    t_path = "data/ee/event_type/event_detection_9575.json"
-    output_path = name_with_date("类型+论元 修复[ARG]和合并BUG")
+    event_detection_path = "data/ee/event_type/event_detection_9575.json"
+    test2_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json"
+    output_path = name_with_date("has_trigger_9271_exist")
     predict_tool.joint_predict(
-        None, output_path, no_trigger=True, input_event_type=t_path
+        filepath=test2_path,
+        output=output_path,
+        # no_trigger=True,
+        # input_event_type=event_detection_path,
     )

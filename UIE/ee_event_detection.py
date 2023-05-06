@@ -19,9 +19,9 @@ evt_dict = {"出售/收购": "财经/交易-出售/收购", "跌停": "财经/�
 def query(textb):
     string = "[SEP]"
     for i,evt in enumerate(all_evt):
-        string += " [MASK] {} ".format(evt)
-        if i != len(all_evt) - 1:
-            string += "[SEP] "
+        string += " unused5 [MASK] {} unused6 ".format(evt)
+        # if i != len(all_evt) - 1:
+        #     string += "[SEP] "
     return (textb + string)
 
 def create_verified_dataset(file):
@@ -113,7 +113,7 @@ def trigger_eval_file(input_file,label_file):
     score = get_p_r_f(tp, fp, fn)
     print("precision:{},recall:{},f1_score:{}".format(score[0],score[1],score[2]))
 
-def trigger_eval(file, batch_size=32, model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta/best_model"):
+def trigger_eval(file, batch_size=32, model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta_hasSpe"):
     
     labels,datas,texts = create_verified_dataset(file)
     # print(datas)
@@ -191,4 +191,4 @@ if __name__ == '__main__':
     out = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/tmp.json"
     bio_pred = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/storage/bio_pred.json"
     # ret = trigger_predict(file=dev,output="log/event_detection_dev.txt",batch_size=32,model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta 9575")
-    trigger_eval_file(input_file='/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/event_type/event_detection_dev.txt',label_file=dev)
+    trigger_eval(file=dev)

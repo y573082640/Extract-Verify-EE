@@ -144,15 +144,14 @@ class EeDataset(ListDataset):
             data = self.convert_tri_data(data, mode)
         elif "ner" == self.args.task:  ## 如果采用拼接增强策略
             data = self.convert_evt_data(data, mode)
-
+        # logging.debug(data)
         return data
 
     def convert_argu_data(self, role_tuple, mode=None):
         max_len = self.args.max_seq_len
 
         demo_tuples = self.args.demo_tuples
-
-        sim_id = role_tuple["sim_ids"][0]
+        sim_id = random.choice(role_tuple["sim_ids"])
         demo = None
 
         if mode == "demo":
@@ -165,11 +164,11 @@ class EeDataset(ListDataset):
                 demo = None
 
         if mode == "merge":
-            random_number = random.choice([1, 2, 3])
-            if random_number == 1:
-                role_tuple = random_replace(
-                    role_tuple, self.args.argument_label_dict, self.args.replace_set
-                )
+            # random_number = random.choice([1, 2, 3])
+            # if random_number == 1:
+            #     role_tuple = random_replace(
+            #         role_tuple, self.args.argument_label_dict, self.args.replace_set
+            #     )
 
             random_number = random.choice([1, 2, 3, 4])
             if random_number == 3:  ## 随机选取事件拼接
@@ -183,6 +182,11 @@ class EeDataset(ListDataset):
                 role_tuple = merge_argu(role_tuple, role_aug)
             else:  ## 什么都不做
                 role_tuple = role_tuple
+
+        # logging.info('='*20)
+        # logging.info(demo_tuples[sim_id])
+        # logging.info(role_tuple)
+        # logging.info('='*20)
 
         argu_token, obj_token_type_ids = creat_argu_token(role_tuple, demo, max_len)
         argu_start_labels, argu_end_labels, argu_tuples = creat_argu_labels(
@@ -347,7 +351,7 @@ class EeDataset(ListDataset):
     def load_data(self, filename):
         logging.info("...构造文本embedding")
         sim_scorer = self.args.sim_scorer
-        embs, data_list = sim_scorer.create_embs_and_tuples(filename, self.args.task)
+        embs, data_list = sim_scorer.create_embs_and_tuples(filename, self.args.task,self.args.add_trigger)
         logging.info("文本embedding构造完毕")
         # 此处用训练集作为demo库
         ignore_first = True if filename == self.args.demo_path else False

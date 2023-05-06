@@ -2,9 +2,12 @@ import numpy as np
 from collections import defaultdict
 import multiprocessing
 import logging
+
+
 def sigmoid(x):
     ## 将实数映射到(0,1)，记住sigmoid(0) = 0.5
     return 1 / (1 + np.exp(-x))
+
 
 def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
     ret = []
@@ -13,11 +16,14 @@ def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
         ret.append(predict_entities)
     return ret
 
+
 def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids, roles):
     ret = []
-    for s_logit, e_logit, mask, text, e_id, role in zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles):
+    for s_logit, e_logit, mask, text, e_id, role in zip(
+        s_logits, e_logits, masks, raw_tokens, event_ids, roles
+    ):
         length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.45)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.25)
         values = pred_entities["答案"]
         # logging.info(values)
         for v in values:
@@ -25,60 +31,68 @@ def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids,
             end = v[1]
             ans = "".join(text[start:end]).replace("[TGR]", "").replace("[SEP]", "")
             if ans != "":
-                ret.append({
-                    'role': role,
-                    'argument': ans,
-                    'event_id': e_id,
-                })
+                ret.append(
+                    {
+                        "role": role,
+                        "argument": ans,
+                        "event_id": e_id,
+                    }
+                )
     return ret
 
-def tri_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, text_ids, event_types, text_bias):
+
+def tri_decode_batch(
+    s_logits, e_logits, masks, id2label, raw_tokens, text_ids, event_types, text_bias
+):
     ret = []
-    for s_logit, e_logit, mask, text, t_id, e_type, bias in zip(s_logits, e_logits, masks, raw_tokens, text_ids, event_types, text_bias):
+    for s_logit, e_logit, mask, text, t_id, e_type, bias in zip(
+        s_logits, e_logits, masks, raw_tokens, text_ids, event_types, text_bias
+    ):
         length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label,bound=0.45)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.45)
         values = pred_entities["答案"]
         for v in values:
-            start = v[0] - 1 ## 文本中没有开头结尾的CLS和SEP，而LOGITS中有，因此减一
+            start = v[0] - 1  ## 文本中没有开头结尾的CLS和SEP，而LOGITS中有，因此减一
             end = v[1] - 1
             ans = "".join(text[start:end])
             if start > bias:
-                ret.append({
-                    'event_type': e_type,
-                    'trigger': ans,
-                    "trigger_start_index":start - bias,
-                    "arguments":[],
-                    'id': t_id, 
-                    'text':"".join(text[bias:]).replace("[SEP]",""),
-                })
+                ret.append(
+                    {
+                        "event_type": e_type,
+                        "trigger": ans,
+                        "trigger_start_index": start - bias,
+                        "arguments": [],
+                        "id": t_id,
+                        "text": "".join(text[bias:]).replace("[SEP]", ""),
+                    }
+                )
     data_dict = {}
     for event_tuple in ret:
-        text_id = event_tuple['id']
-        event_type = event_tuple['event_type']
+        text_id = event_tuple["id"]
+        event_type = event_tuple["event_type"]
         if not data_dict.__contains__(text_id):
             data_dict[text_id] = {
-                "event_dict":{},
-                "text_id":text_id,
-                "text" : event_tuple['text']
+                "event_dict": {},
+                "text_id": text_id,
+                "text": event_tuple["text"],
             }
-        event_dict = data_dict[text_id]['event_dict']
+        event_dict = data_dict[text_id]["event_dict"]
         ## [["不","敌"],187]
         if not event_dict.__contains__(event_type):
             event_dict[event_type] = []
 
         event_dict[event_type].append(
-            (
-                [i for i in event_tuple['trigger']],event_tuple['trigger_start_index']
-            )
+            ([i for i in event_tuple["trigger"]], event_tuple["trigger_start_index"])
         )
     # logging.info(ret)
     # exit(0)
     return data_dict.values()
-                     
+
+
 # def ner_decode_batch(ner_s_logits, ner_e_logits, raw_tokens, ent_id2label):
 #     with multiprocessing.Pool() as pool:
 #         # 将输入数据打包成一个列表
-#         inputs = [(s_logit, e_logit, text, ent_id2label) 
+#         inputs = [(s_logit, e_logit, text, ent_id2label)
 #                   for s_logit, e_logit, text in zip(ner_s_logits, ner_e_logits, raw_tokens)]
 #         # 使用进程池进行并行计算
 #         results = pool.starmap(ner_decode, inputs)
@@ -104,8 +118,8 @@ def tri_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, text_ids, 
 #     ret = []
 #     with multiprocessing.Pool() as pool:
 #         # 将输入数据打包成一个列表
-#         inputs = [(s_logit, e_logit, mask, text, e_id, role, id2label) 
-#                   for s_logit, e_logit, mask, text, e_id, role in 
+#         inputs = [(s_logit, e_logit, mask, text, e_id, role, id2label)
+#                   for s_logit, e_logit, mask, text, e_id, role in
 #                   zip(s_logits, e_logits, masks, raw_tokens, event_ids, roles)]
 #         # 使用进程池进行并行计算
 #         results = pool.starmap(_multiprocessing_obj_decode, inputs)
@@ -114,27 +128,28 @@ def tri_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, text_ids, 
 #             ret.extend(result)
 #     return ret
 
+
 def ner_decode(start_logits, end_logits, raw_text, id2label):
     """
     不确定有哪些事件类型，用于实际预测
     """
     predict_entities = defaultdict(list)
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.1, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.1, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.25, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.25, 1, 0)
 
-        #实际原文本中没有[CLS]和[SEP]，所以+1
-        start_pred = start_logit[1:len(raw_text)+1]
-        end_pred = end_logit[1:len(raw_text)+1]
+        # 实际原文本中没有[CLS]和[SEP]，所以+1
+        start_pred = start_logit[1 : len(raw_text) + 1]
+        end_pred = end_logit[1 : len(raw_text) + 1]
 
         for i, s_type in enumerate(start_pred):
             if s_type == 0:
                 continue
             for j, e_type in enumerate(end_pred[i:]):
                 if s_type == e_type:
-                    tmp_ent = raw_text[i:i + j + 1]
+                    tmp_ent = raw_text[i : i + j + 1]
                     # logging.debug(tmp_ent)
-                    if tmp_ent == '':
+                    if tmp_ent == "":
                         continue
                     predict_entities[id2label[label_id]].append((tmp_ent, i))
                     break
@@ -147,21 +162,22 @@ def ner_decode2(start_logits, end_logits, length, id2label):
     确定有哪些事件类型，用于训练
     """
     predict_entities = {x: [] for x in list(id2label.values())}
-    
+
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.25, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.25, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.5, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.5, 1, 0)
         start_pred = start_logit
         end_pred = end_logit
         for i, s_type in enumerate(start_pred):
             if s_type == 0:
                 continue
             for j, e_type in enumerate(end_pred[i:]):
-                if s_type == e_type:                    
-                    predict_entities[id2label[label_id]].append((i, i+j+1))
+                if s_type == e_type:
+                    predict_entities[id2label[label_id]].append((i, i + j + 1))
                     # TODO:找到距离自己最近的结束符号就停止了，考虑贪心匹配？
                     break
     return predict_entities
+
 
 def ner_decode_label(start_labels, end_labels, length, id2label):
     """
@@ -171,7 +187,7 @@ def ner_decode_label(start_labels, end_labels, length, id2label):
     # predict_entities = defaultdict(list)
     # print(start_pred)
     # print(end_pred)
-    
+
     for label_id in range(len(id2label)):
         start_logit = start_labels[label_id]
         end_logit = end_labels[label_id]
@@ -179,10 +195,11 @@ def ner_decode_label(start_labels, end_labels, length, id2label):
             if s_type == 0:
                 continue
             for j, e_type in enumerate(end_logit[i:]):
-                if s_type == e_type:                    
-                    predict_entities[id2label[label_id]].append((i, i+j+1))
+                if s_type == e_type:
+                    predict_entities[id2label[label_id]].append((i, i + j + 1))
                     break
     return predict_entities
+
 
 def bj_decode(start_logits, end_logits, length, id2label, bound=0.45):
     ## id2label = {0:'答案'}
@@ -196,10 +213,11 @@ def bj_decode(start_logits, end_logits, length, id2label, bound=0.45):
             continue
         for j, e_type in enumerate(end_pred[i:]):
             if s_type == e_type:
-                predict_entities[id2label[0]].append((i, i+j+1))
+                predict_entities[id2label[0]].append((i, i + j + 1))
                 break
 
     return predict_entities
+
 
 def bj_decode_label(start_labels, end_labels, length, id2label):
     ## id2label = {0:'答案'}
@@ -209,23 +227,23 @@ def bj_decode_label(start_labels, end_labels, length, id2label):
             continue
         for j, e_type in enumerate(end_labels[i:]):
             if s_type == e_type:
-                predict_entities[id2label[0]].append((i, i+j+1))
+                predict_entities[id2label[0]].append((i, i + j + 1))
                 break
 
     return predict_entities
+
 
 def depart_ner_output_batch(output, batch_data, ner_s_logits, ner_e_logits, raw_tokens):
     # (num_labels,batch_size,max_len)
     ner_start_logits = output["ner_output"]["ner_start_logits"]
     ner_end_logits = output["ner_output"]["ner_end_logits"]
-    batch_size = batch_data['ner_input_ids'].size(0)
+    batch_size = batch_data["ner_input_ids"].size(0)
 
     for i in range(batch_size):
         # 对一条数据上不同label的预测值
-        ner_s_logits.append([logit[i, :]
-                            for logit in ner_start_logits])
+        ner_s_logits.append([logit[i, :] for logit in ner_start_logits])
         ner_e_logits.append([logit[i, :] for logit in ner_end_logits])
 
-    raw_tokens += batch_data['raw_tokens']
+    raw_tokens += batch_data["raw_tokens"]
 
     return ner_s_logits, ner_e_logits, raw_tokens

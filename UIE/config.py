@@ -51,11 +51,12 @@ class EeArgs:
         output_name=None,
         aug_mode=None,
         weight_path=None,
+        add_trigger=False
     ):
         self.task = task
         self.data_name = "duee"
         self.data_dir = "ee"
-
+        self.add_trigger = add_trigger ## 是否使用触发词信息
         if weight_path is not None:
             self.save_dir = weight_path
             if "roberta" in weight_path:
@@ -133,7 +134,7 @@ class EeArgs:
         self.ner_num_labels = len(self.entity_label)
         self.train_epoch = 20
         self.train_batch_size = 32
-        self.eval_batch_size = 8
+        self.eval_batch_size = 32
         self.eval_step = 300
         self.max_seq_len = 512
         self.weight_decay = 0.01

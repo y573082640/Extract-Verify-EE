@@ -1,30 +1,25 @@
-from transformers import BertForMaskedLM, BertTokenizer, pipeline
-import numpy as np
-model_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/model_hub/chinese-roberta-wwm-ext"
-tokenizer = BertTokenizer.from_pretrained(model_path)
-text = '蔚来创始人、CEO 李斌今天发布内部邮件'
-# k = tokenizer.decode(3187)
-# k = tokenizer.decode(3300)
-# print(k)
+import pickle
+import json
+def dump_sample(file_name):
+    with open(file_name, 'rb') as filehandle:
+        # read the data as binary data stream
+        train_data = pickle.load(filehandle)
 
-# indices1 = np.argwhere(t1 == 3300).squeeze()
-# indices2 = np.argwhere(t2 == 3300).squeeze()
-# print(indices1)
-# print(indices2)
-# result = len(np.intersect1d(indices1, indices2))
-# precision = result/len(indices1)
-# recall = result/len(indices2)
-# f1 = 2*recall*precision/(precision+recall)
-# print(precision)
-# print(recall)
-# print(f1)
+    train_dict = {}
+    for line in train_data:
+        text, label = line[0], line[1]
+        train_dict[text] = True
 
-# indices1 = np.array([True,False])
-# indices2 = np.array([False,True])
-# labels = np.array([3300,3187])
-# target_mask1 = labels == (tokenizer.convert_tokens_to_ids('有'))
-# target_mask2 = labels == (tokenizer.convert_tokens_to_ids('无'))
-# target_mask = target_mask1 | target_mask2
-# indices = indices1 | indices2
-print(tokenizer.tokenize(text))
-print([b for b in text])
+    output = []
+    with open('data/ee/duee/duee_train.json', 'r') as filehandle:
+        # read the data as binary data stream
+        for line in filehandle:
+            d = json.loads(d)
+            if d['text'] in train_data:
+                output.append(d)
+
+    with open('data/ee/duee/{}'.format(file_name), 'r') as filehandle:
+        for line in output:
+            json.dump(line, filehandle, ensure_ascii=False, separators=(",", ":"))
+            filehandle.write("\n")
+

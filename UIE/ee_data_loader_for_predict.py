@@ -54,6 +54,7 @@ class EeDatasetPredictor(ListDataset):
         data = self.data[index]
         if "tri" == self.args.task:
             data = self.convert_tri_data(data)
+        # logging.info(data)
         return data
 
     def process_list_data(self, data_list):

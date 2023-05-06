@@ -332,7 +332,7 @@ class EePipeline:
             s_logits, e_logits, argu_tuples, masks, raw_tokens
         ):
             length = sum(mask)
-            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.45)
+            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.1)
             true_entities = {"答案": argu_tuple}
 
             # print("========================")
@@ -866,7 +866,7 @@ class EePipeline:
 
 
 if __name__ == "__main__":
-    # obj_weight = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_mergedRole_noLexicon_noDemo_allMatch_len512_bs32.pt"
+    obj_weight = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_None_【论元抽取】多论元合并 No DEMO sample4.pt"
     ner_weright = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/ner_duee_roberta_no_lexicon_len256_bs32.pt"
     check_base = (
         "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
@@ -887,14 +887,13 @@ if __name__ == "__main__":
     args = EeArgs(
         "obj",
         log=True,
-        aug_mode='demo',
-        model="roberta",
-        output_name="testtest"
-        # weight_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/obj_duee_roberta_None_【论元抽取】多论元合并.pt"
+        aug_mode=None,
+        model='roberta',
+        add_trigger=False,
+        # output_name="【论元抽取】多论元合并 No DEMO sample2"
+        weight_path=obj_weight
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
-    ee_pipeline.train()
     ee_pipeline.test()
     torch.cuda.empty_cache()
-
