@@ -332,7 +332,7 @@ class EePipeline:
             s_logits, e_logits, argu_tuples, masks, raw_tokens
         ):
             length = sum(mask)
-            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.1)
+            pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.45)
             true_entities = {"答案": argu_tuple}
 
             # print("========================")
@@ -500,9 +500,9 @@ class EePipeline:
         best_f1 = 0.0
         early_stop_cnt = 0
         for epoch in range(1, self.args.train_epoch + 1):
-            if early_stop_cnt >= 12:
-                logging.warn('early stop before epoch{}'.format(epoch))
-                break
+            # if early_stop_cnt >= 12:
+            #     logging.warn('early stop before epoch{}'.format(epoch))
+            #     break
             for batch_data in tqdm.tqdm((train_loader)):
                 train_loss = 0
                 self.model.train()
@@ -887,13 +887,26 @@ if __name__ == "__main__":
     args = EeArgs(
         "obj",
         log=True,
-        aug_mode=None,
+        aug_mode='merge',
         model='roberta',
-        add_trigger=False,
-        # output_name="【论元抽取】多论元合并 No DEMO sample2"
-        weight_path=obj_weight
+        add_trigger=True,
+        output_name="【论元抽取】多论元合并 No DEMO has TGR sample1"
     )
     model = UIEModel(args)
     ee_pipeline = EePipeline(model, args)
-    ee_pipeline.test()
+    ee_pipeline.train()
+    torch.cuda.empty_cache()
+
+
+    args = EeArgs(
+        "obj",
+        log=False,
+        aug_mode='merge',
+        model='roberta',
+        add_trigger=True,
+        output_name="【论元抽取】多论元合并 No DEMO has TGR sample2"
+    )
+    model = UIEModel(args)
+    ee_pipeline = EePipeline(model, args)
+    ee_pipeline.train()
     torch.cuda.empty_cache()

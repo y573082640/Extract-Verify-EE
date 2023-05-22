@@ -6,3 +6,4 @@ storage/
 log/
 output/
 experiment/
+model_for_seqclassification/

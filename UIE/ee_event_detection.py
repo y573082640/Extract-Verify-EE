@@ -1,5 +1,6 @@
 from transformers import BertForMaskedLM, BertTokenizer, pipeline
 from torch.utils.data import DataLoader, Dataset
+import torch.nn.functional as F
 import tqdm
 import json
 import torch
@@ -19,9 +20,10 @@ evt_dict = {"出售/收购": "财经/交易-出售/收购", "跌停": "财经/�
 def query(textb):
     string = "[SEP]"
     for i,evt in enumerate(all_evt):
-        string += " unused5 [MASK] {} unused6 ".format(evt)
-        # if i != len(all_evt) - 1:
-        #     string += "[SEP] "
+        # string += " unused5 [MASK] {} unused6 ".format(evt)
+        string += " [MASK] {} ".format(evt)
+        if i != len(all_evt) - 1:
+            string += "[SEP] "
     return (textb + string)
 
 def create_verified_dataset(file):
@@ -49,13 +51,13 @@ def calculate_metric(predict, gt):
     fn = len(gt) - tp
     return tp, fp, fn
 
-def get_prediction(sents,model,tokenizer):
+def get_prediction(sents,model,tokenizer,score_bound=0.98):
     inputs = tokenizer(
             sents,
             padding=True,
             truncation=True,
             max_length=512,
-            return_tensors='pt'
+            return_tensors='pt',
             # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
             # receives the `special_tokens_mask`.
             # return_special_tokens_mask=True,
@@ -69,22 +71,28 @@ def get_prediction(sents,model,tokenizer):
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
     with torch.no_grad():
-        output = model(**inputs)
+        output = model(**inputs, return_dict=True,
+                            output_hidden_states=True)
 
-    last_hidden_state = output[0]
-    last_hidden_state = last_hidden_state.argmax(-1)
+    logits = output.logits
+    max_scores = F.softmax(logits,-1)
+    max_scores = torch.max(max_scores,-1)
+    preds = torch.argmax(logits, dim=-1)
     ## shape = (batch_size,max_len,vocab_size)
-    # print(last_hidden_state.shape)
+    # print(preds.shape)
+    # print(max_scores.values.shape)
 
     ret = []
     
     for input_idx,masked_pos in enumerate(all_masked_pos):
         list_of_list =[]
         for index,mask_index in enumerate(masked_pos):
-            top_label = last_hidden_state[input_idx][mask_index]
+            top_label = preds[input_idx][mask_index]
             word = tokenizer.decode(top_label.item()).strip()
             if word == '有':
-                list_of_list.append(evt_dict[all_evt[index]])
+                score = max_scores.values[input_idx][mask_index]
+                if score > score_bound:
+                    list_of_list.append(evt_dict[all_evt[index]])
         ret.append(list_of_list)
         
     return ret
@@ -113,7 +121,10 @@ def trigger_eval_file(input_file,label_file):
     score = get_p_r_f(tp, fp, fn)
     print("precision:{},recall:{},f1_score:{}".format(score[0],score[1],score[2]))
 
-def trigger_eval(file, batch_size=32, model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta_hasSpe"):
+def trigger_eval(file, 
+                 batch_size=32, 
+                 score_bound=0.98,
+                 model_path="checkpoints/ee/mlm_tri_roberta_noSPE_9533"):
     
     labels,datas,texts = create_verified_dataset(file)
     # print(datas)
@@ -131,7 +142,7 @@ def trigger_eval(file, batch_size=32, model_path="/home/ubuntu/PointerNet_Chines
     )
     ret = []
     for batch_data in tqdm.tqdm(data_loader):
-        ret += get_prediction(batch_data,model,tokenizer)
+        ret += get_prediction(batch_data,model,tokenizer,score_bound)
     tp, fp, fn = 0,0,0
     
     for i in range(len(labels)):
@@ -140,7 +151,9 @@ def trigger_eval(file, batch_size=32, model_path="/home/ubuntu/PointerNet_Chines
         fp += fp1
         fn += fn1
     score = get_p_r_f(tp, fp, fn)
-    print("precision:{},recall:{},f1_score:{}".format(score[0],score[1],score[2]))
+    # print("precision:{},recall:{},f1_score:{}".format(score[0],score[1],score[2]))
+    return score
+    
 
 def trigger_predict(file,output, batch_size=32, model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta/best_model"):
     datas = []
@@ -185,10 +198,18 @@ def trigger_predict(file,output, batch_size=32, model_path="/home/ubuntu/Pointer
             json.dump(answer, fp, ensure_ascii=False, separators=(',', ':'))
             fp.write("\n")
 
+import numpy as np
 if __name__ == '__main__':
     dev = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_dev.json"
     path = '/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json'
     out = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/log/tmp.json"
     bio_pred = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/storage/bio_pred.json"
     # ret = trigger_predict(file=dev,output="log/event_detection_dev.txt",batch_size=32,model_path="/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/mlm_tri_roberta 9575")
-    trigger_eval(file=dev)
+    best_f1 = 0
+    for bound in np.arange(0.5,1,0.01):
+        score = trigger_eval(file=dev,score_bound = bound)
+        print("precision:{},recall:{},f1_score:{}".format(score[0],score[1],score[2]))
+        if score[2] > best_f1:
+            best_f1 = score[2]
+            print("【best f1】bound={},f1_score={}".format(bound,best_f1))
+        

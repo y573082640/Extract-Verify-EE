@@ -194,14 +194,14 @@ class EeArgs:
                 self.label2role = json.load(fp)
 
         # 相似度计算，用于辅助训练和文本增强
-        logging.info("...加载相似度匹配模型:" + self.sim_model)
-        self.sim_scorer = Sim_scorer(self.sim_model)
-        logging.info("...构造提示库embedding")
-        self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
-            self.demo_path, self.task
-        )
-        logging.info("...提示库embedding构造完毕")
-        logging.info("【增强模式】" + str(aug_mode))
+        # logging.info("...加载相似度匹配模型:" + self.sim_model)
+        # self.sim_scorer = Sim_scorer(self.sim_model)
+        # logging.info("...构造提示库embedding")
+        # self.demo_embs, self.demo_tuples = self.sim_scorer.create_embs_and_tuples(
+        #     self.demo_path, self.task
+        # )
+        # logging.info("...提示库embedding构造完毕")
+        # logging.info("【增强模式】" + str(aug_mode))
 
     def init_lexicon(self):
         build_gaz_file(self.gaz_file, self.gaz)

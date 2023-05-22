@@ -23,7 +23,7 @@ def obj_decode_batch(s_logits, e_logits, masks, id2label, raw_tokens, event_ids,
         s_logits, e_logits, masks, raw_tokens, event_ids, roles
     ):
         length = sum(mask)
-        pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.25)
+        pred_entities = bj_decode(s_logit, e_logit, length, id2label, bound=0.1)
         values = pred_entities["答案"]
         # logging.info(values)
         for v in values:
@@ -135,8 +135,8 @@ def ner_decode(start_logits, end_logits, raw_text, id2label):
     """
     predict_entities = defaultdict(list)
     for label_id in range(len(id2label)):
-        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.25, 1, 0)
-        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.25, 1, 0)
+        start_logit = np.where(sigmoid(start_logits[label_id]) > 0.1, 1, 0)
+        end_logit = np.where(sigmoid(end_logits[label_id]) > 0.1, 1, 0)
 
         # 实际原文本中没有[CLS]和[SEP]，所以+1
         start_pred = start_logit[1 : len(raw_text) + 1]

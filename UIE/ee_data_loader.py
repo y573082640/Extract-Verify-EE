@@ -137,14 +137,16 @@ class EeDataset(ListDataset):
     def __getitem__(self, index):
         data = self.data[index]
         mode = self.args.aug_mode
-
+        if self.test:
+            mode = None
         if "obj" == self.args.task:  ## 如果采用辅助学习增强策略
             data = self.convert_argu_data(data, mode)
         elif "tri" == self.args.task:  ## 如果采用拼接增强策略
             data = self.convert_tri_data(data, mode)
         elif "ner" == self.args.task:  ## 如果采用拼接增强策略
             data = self.convert_evt_data(data, mode)
-        # logging.debug(data)
+        # if self.test:
+        #     logging.debug(data)
         return data
 
     def convert_argu_data(self, role_tuple, mode=None):

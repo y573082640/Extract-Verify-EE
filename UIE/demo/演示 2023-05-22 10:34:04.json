@@ -1,0 +1,25 @@
+{"id":"a7c74f75eb8986377096b4dc62db217d","event_list":[{"event_type":"产品行为-上映","arguments":[{"role":"上映影视","argument":"振华三部曲的《暗恋橘生淮南》"}]}]}
+{"id":"1bf5de39669122e4458ed6db2cddc0c4","event_list":[{"event_type":"财经/交易-出售/收购","arguments":[{"role":"出售方","argument":"《全境封锁》瑞典工作室"},{"role":"交易物","argument":"《全境封锁》瑞典工作室"},{"role":"收购方","argument":"腾讯"}]}]}
+{"id":"b98df49b32e4e9924c23bb0cd0c1e83d","event_list":[{"event_type":"组织行为-开幕","arguments":[{"role":"时间","argument":"6月22日"},{"role":"地点","argument":"日照市山东外国语职业技术大学"},{"role":"活动名称","argument":"山外杯第四届全国体育院校篮球联赛（SCBA）"}]}]}
+{"id":"b73704c1d86084ef14d942168b310b1c","event_list":[{"event_type":"产品行为-发布","arguments":[{"role":"发布产品","argument":"2019年智能网联汽车标准化工作要点"},{"role":"发布方","argument":"工信部装备工业司"}]}]}
+{"id":"9f7f677595a7f19ca16304a3d85ae94f","event_list":[{"event_type":"人生-分手","arguments":[{"role":"时间","argument":"两年前"},{"role":"分手双方","argument":"台湾歌手陈绮贞"},{"role":"分手双方","argument":"交往18年的男友、音乐人钟成虎"}]}]}
+{"id":"4d1f964593cd077f9171c09512974e8c","event_list":[{"event_type":"财经/交易-降价","arguments":[{"role":"降价方","argument":"国际金"},{"role":"降价物","argument":"国际金"}]},{"event_type":"财经/交易-涨价","arguments":[{"role":"涨价物","argument":"国际金价"},{"role":"涨价方","argument":"国际金"}]}]}
+{"id":"6e62429b5f2e65c9f6a0052d6d1fa20d","event_list":[{"event_type":"竞赛行为-胜负","arguments":[{"role":"败者","argument":"中国男篮"},{"role":"胜者","argument":"中国男篮"}]}]}
+{"id":"af0185e53b0512bcb5909a20bf3ce1c5","event_list":[{"event_type":"组织行为-开幕","arguments":[{"role":"时间","argument":"8月31日"},{"role":"地点","argument":"四川眉山市"},{"role":"活动名称","argument":"第四届两岸关系天府论坛"}]}]}
+{"id":"1461cea84fc66aa3b0ac48b2d3675720","event_list":[{"event_type":"财经/交易-涨价","arguments":[{"role":"时间","argument":"6月10日"},{"role":"时间","argument":"前一交易日"},{"role":"涨价幅度","argument":"6.6837%"},{"role":"涨价物","argument":"中证申万电子行业投资指数分级"},{"role":"涨价方","argument":"申万菱信"}]}]}
+{"id":"9e1363de04d8598bec9d2a5ef28adf7b","event_list":[{"event_type":"组织行为-开幕","arguments":[{"role":"时间","argument":"9月8日"},{"role":"地点","argument":"中国(绵阳)科技城"},{"role":"活动名称","argument":"第七届中国(绵阳)科技城国际科技博览会成果发布会"}]}]}
+{"id":"1a8ca9f7df1013e9de10bf02e41ab6c5","event_list":[{"event_type":"人生-怀孕","arguments":[{"role":"时间","argument":"今日"},{"role":"怀孕者","argument":"蔡少芬"}]}]}
+{"id":"8efe81caa39f53712b3ecc01fc2df01c","event_list":[{"event_type":"产品行为-上映","arguments":[{"role":"时间","argument":"九月底"},{"role":"上映影视","argument":"《攀登者》"}]},{"event_type":"产品行为-上映","arguments":[{"role":"时间","argument":"最近"},{"role":"上映方","argument":"更多人"},{"role":"上映影视","argument":"《攀登者》"}]}]}
+{"id":"09950cf8b48477533f6ae8b888bc9854","event_list":[{"event_type":"产品行为-发布","arguments":[{"role":"发布产品","argument":"江淮瑞风S2"}]}]}
+{"id":"15aa8ec5ce0d66f400428ebaea692792","event_list":[{"event_type":"司法行为-开庭","arguments":[]},{"event_type":"司法行为-起诉","arguments":[{"role":"被告","argument":"威马"},{"role":"原告","argument":"吉利"}]}]}
+{"id":"972e8a63de6f8d06c7e3619badc20f80","event_list":[{"event_type":"组织行为-开幕","arguments":[{"role":"地点","argument":"东京"},{"role":"活动名称","argument":"东京电影节"}]}]}
+{"id":"1e295b4ca4685d5743c604da78fb60fb","event_list":[{"event_type":"产品行为-获奖","arguments":[{"role":"获奖人","argument":"蒙牛"},{"role":"获奖人","argument":"飞鹤"},{"role":"奖项","argument":"顶级国际食品大奖"}]},{"event_type":"产品行为-获奖","arguments":[{"role":"奖项","argument":"三项国际食品顶尖大奖——“世界食品创新大奖”"},{"role":"奖项","argument":"“蒙特奖（Monde Selection）”和“顶级美味大奖（Superior Taste Award）”"}]}]}
+{"id":"28092b621bf7fa4af9c800195f5d773f","event_list":[{"event_type":"组织关系-辞/离职","arguments":[{"role":"离职者","argument":"经纪人毕滢"}]}]}
+{"id":"58d0d6c91a79786515fbe13ac337256f","event_list":[{"event_type":"组织关系-辞/离职","arguments":[{"role":"离职者","argument":"辅警"}]}]}
+{"id":"0c3b2abb4c53383615074ff4bbf3ef1d","event_list":[{"event_type":"竞赛行为-胜负","arguments":[{"role":"败者","argument":"鹈鹕"},{"role":"胜者","argument":"猛龙"}]}]}
+{"id":"2adbe1af31051ca353f404f09d4ede8e","event_list":[{"event_type":"财经/交易-出售/收购","arguments":[{"role":"出售方","argument":"英腾教育"},{"role":"交易物","argument":"英腾教育"},{"role":"收购方","argument":"中国高科"}]}]}
+{"id":"3d0ab452646787f5d004a9541221a6ab","event_list":[{"event_type":"产品行为-发布","arguments":[{"role":"发布产品","argument":"国家艺术基金艺术结构课题组编著的《艺术成本结构调研报告》"},{"role":"发布方","argument":"文化艺术出版社"}]}]}
+{"id":"d417ab0761301220d35522f42d717821","event_list":[{"event_type":"竞赛行为-胜负","arguments":[]}]}
+{"id":"afc1ba7dc2e6d03db10a81d816f61505","event_list":[{"event_type":"竞赛行为-胜负","arguments":[{"role":"败者","argument":"曼联"},{"role":"胜者","argument":"利物浦"},{"role":"赛事名称","argument":"“双红会”"}]}]}
+{"id":"c40650a2014a84d2d2e8bcfd2b19bf98","event_list":[{"event_type":"财经/交易-出售/收购","arguments":[{"role":"出售方","argument":"任正非"},{"role":"交易物","argument":"5G技术"},{"role":"收购方","argument":"任正非"},{"role":"收购方","argument":"美国"}]}]}
+{"id":"734b8c1cdf9da3325b573426d8addbff","event_list":[{"event_type":"灾害/意外-袭击","arguments":[{"role":"地点","argument":"永安村沟北"},{"role":"地点","argument":"附近村庄"},{"role":"受伤人数","argument":"多名"}]}]}

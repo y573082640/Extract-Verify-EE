@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import json
 import torch
-from transformers import BertTokenizer
+from transformers import BertTokenizer,AutoModelForSequenceClassification,AutoTokenizer,TextClassificationPipeline
 from UIE.ee_main import EePipeline
 from UIE.model import UIEModel
 from UIE.config import EeArgs, get_tokenizer
@@ -42,7 +42,7 @@ def chunks(lst, n):
 
 
 def name_with_date(name):
-    return "log/%s %s.json" % (name, datetime.fromtimestamp(int(time())))
+    return "demo/%s %s.json" % (name, datetime.fromtimestamp(int(time())))
 
 
 def map_fn(example, mode="correct"):
@@ -68,7 +68,12 @@ def map_fn(example, mode="correct"):
         que_str = "[SEP]问题：" + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
     elif mode == "exist":
         que_str = get_question_for_verify(example["event_type"], example["role"])
-        que_str = "[SEP] [MASK] " + que_str
+        # que_str = "[SEP] unused5 [MASK] unused6 " + que_str
+        # que_str = "[SEP] [MASK] " + que_str
+        que_str = "[SEP]问题：" + que_str + "答案： unused4 unused5 [MASK] unused6 unused7 。"
+    elif mode == "cls":
+        que_str = get_question_for_verify(example["event_type"], example["role"])
+        que_str = "[SEP]" + que_str
     else:
         raise AttributeError("提供的mode应该为exist 或者 correct")
 
@@ -176,7 +181,7 @@ class Predictor:
             argu = value[0]
             e = evt[argu["event_id"]]
             merged_object = {**e, **argu}  # 构建对应论元的问题
-            dataset.append(map_fn(merged_object, mode="exist"))
+            dataset.append(map_fn(merged_object,'exist'))
         # logging.info(dataset)
         return evt_role, dataset
 
@@ -189,6 +194,7 @@ class Predictor:
             ret[e["text_id"]]["event_list"][e["event_id"]] = {
                 "event_type": e["event_type"],
                 "arguments": [],
+                'text':e['text']
             }
         # 将论元填入事件
         for argu in obj_result:
@@ -200,9 +206,12 @@ class Predictor:
         output = []
         for text_id, text_events in ret.items():
             tmp = {}
+            tmp['text'] = ""
             tmp["id"] = text_id
             tmp["event_list"] = []
             for _, event in text_events["event_list"].items():
+                tmp['text'] = event['text']
+                del event['text']
                 tmp["event_list"].append(event)
             output.append(tmp)
         return output
@@ -221,35 +230,71 @@ class Predictor:
         obj_result,
         no_trigger=True,
         batch_size=64,
-        model_path="checkpoints/ee/mlm_exist_roberta_9277",
+        model_path="checkpoints/ee/mlm_label_roberta",
+        mode="mlm"
     ):
-        evt_role, datas = self._create_verified_dataset(argu_input, obj_result)
-        # load your model and tokenizer from a local directory or a URL
+        if mode == "mlm":
+            evt_role, datas = self._create_verified_dataset(argu_input, obj_result)
+            # load your model and tokenizer from a local directory or a URL
 
-        model = BertForMaskedLM.from_pretrained(model_path)
-        tokenizer = BertTokenizer.from_pretrained(model_path)
+            model = BertForMaskedLM.from_pretrained(model_path)
+            tokenizer = BertTokenizer.from_pretrained(model_path)
 
-        # create an unmasker object with the model and tokenizer
-        unmasker = pipeline(
-            "fill-mask", model=model, tokenizer=tokenizer, device=0, top_k=1
-        )
+            # create an unmasker object with the model and tokenizer
+            unmasker = pipeline(
+                "fill-mask", model=model, tokenizer=tokenizer, device=0, top_k=1
+            )
 
-        results = []
-        infer_data = VerifyDataset(datas)
-        data_loader = DataLoader(
-            dataset=infer_data, batch_size=batch_size, num_workers=4, shuffle=False
-        )
+            results = []
+            infer_data = VerifyDataset(datas)
+            data_loader = DataLoader(
+                dataset=infer_data, batch_size=batch_size, num_workers=4, shuffle=False
+            )
 
-        for batch_data in tqdm.tqdm(data_loader):
-            result = unmasker(batch_data, targets=["有", "无"])
-            # append the result to the list
-            results.extend(result)
+            for batch_data in tqdm.tqdm(data_loader):
+                if no_trigger:
+                    result = unmasker(batch_data, targets=["有", "无"])
+                else:
+                    result = unmasker(batch_data, targets=["是", "不"])
+                # append the result to the list
+                results.extend(result)
 
-        ret = []
-        for i, result in enumerate(results):
-            if result[0]["token_str"] == "有":
-                ret += evt_role[i]
-        return ret
+            ret = []
+            for i, result in enumerate(results):
+                if no_trigger:
+                    if result[0]["token_str"] == "有":
+                        ret += evt_role[i]
+                else:
+                    if result[0]["token_str"] == "是":
+                        ret += evt_role[i]
+            return ret
+        elif mode == 'cls':
+            evt_role, datas = self._create_verified_dataset(argu_input, obj_result)
+            # load your model and tokenizer from a local directory or a URL
+
+            model_name = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/model_for_seqclassification/checkpoint-4300"  # 所使用模型
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+
+            # create an unmasker object with the model and tokenizer
+            clser = TextClassificationPipeline(model=model,tokenizer=tokenizer, device=0)
+
+            results = []
+            infer_data = VerifyDataset(datas)
+            data_loader = DataLoader(
+                dataset=infer_data, batch_size=batch_size, num_workers=4, shuffle=False
+            )
+
+            for batch_data in tqdm.tqdm(data_loader):
+                result = clser(batch_data)
+                # append the result to the list
+                results.extend(result)
+
+            ret = []
+            for i, result in enumerate(results):
+                if result["label"] == "LABEL_1":
+                    ret += evt_role[i]
+            return ret            
 
     def joint_predict(self, filepath, output, no_trigger=False, input_event_type=None):
         st = time()
@@ -266,17 +311,23 @@ class Predictor:
         torch.cuda.empty_cache()
         obj_result = self.predict_obj(argu_input)
         torch.cuda.empty_cache()
-        logging.info("...进行验证过滤")
+        logging.info("...进行假阳性过滤")
         if no_trigger:
-            verified_result = self.verify_result(argu_input, obj_result)
+            verified_result = self.verify_result(
+                argu_input,
+                obj_result,
+                no_trigger=True,
+                model_path="checkpoints/ee/mlm_exist_roberta_no_tgr_9115",
+            )
         else:
             verified_result = self.verify_result(
                 argu_input,
                 obj_result,
-                model_path="checkpoints/ee/mlm_exist_roberta_trg",
+                no_trigger=False,
+                model_path="checkpoints/ee/mlm_label_roberta",
             )
         torch.cuda.empty_cache()
-        logging.info("...转换为评测需要的形式...")
+        logging.info("...输出格式化信息...")
         answer = self.accumulate_answer(argu_input, verified_result)
         answer_no_verified = self.accumulate_answer(argu_input, obj_result)
 
@@ -296,16 +347,16 @@ class Predictor:
         #         fp.write("\n")
         # ##
         # 暂时保存中间输出用于分析
-        with open(name_with_date("answer_no_verified_no_tgr"), "w") as fp:
-            for a in answer_no_verified:
-                json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
-                fp.write("\n")
-        with open(name_with_date("answer_no_remove_no_tgr"), "w") as fp:
-            for a in answer:
-                json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
-                fp.write("\n")
-        #
-        logging.info("...后处理...")
+        # with open(name_with_date("[2023年5月8日 论文修订版 触发词] answer_no_verified_tgr"), "w") as fp:
+        #     for a in answer_no_verified:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
+        #         fp.write("\n")
+        # with open(name_with_date("[2023年5月8日 论文修订版 触发词] answer_no_remove_tgr"), "w") as fp:
+        #     for a in answer:
+        #         json.dump(a, fp, ensure_ascii=False, separators=(",", ":"))
+        #         fp.write("\n")
+
+        logging.info("...去除重复...")
         answer = remove_duplicates(answer)
         logging.info("...预测结果输入文件:" + str(output))
         with open(output, "w") as fp:
@@ -321,23 +372,31 @@ check_base = (
     "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
 )
 ner_path = check_base + "ner_duee_roberta_no_lexicon_len256_bs32.pt"
-no_trigger_obj_path = check_base + "obj_duee_roberta_None_【论元抽取】多论元合并 No DEMO sample4.pt"
+no_trigger_obj_path = (
+    check_base + "obj_duee_roberta_None_【论元抽取】多论元合并 No DEMO sample4.pt"
+)
 obj_path = check_base + "obj_duee_roberta_merge_noRandom_decode=0.5_512_32_sample1.pt"
 tri_path = check_base + "tri_duee_roberta_None_trigger_extraction_noneAug.pt"
 if __name__ == "__main__":
     ner_args = EeArgs(
-        "ner", log=True, add_trigger=True, aug_mode=None, weight_path=ner_path
+        "ner", 
+        log=True,
+        add_trigger=True, 
+        aug_mode=None, 
+        weight_path=ner_path
     )
     obj_args = EeArgs(
-        "obj", log=False, add_trigger=True, aug_mode=None, weight_path=obj_path
+        "obj",
+        log=True,
+        add_trigger=True,
+        aug_mode=None,
+        weight_path=obj_path,
     )
     predict_tool = Predictor(ner_args, obj_args)
     event_detection_path = "data/ee/event_type/event_detection_9575.json"
-    test2_path = "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/data/ee/duee/duee_test2.json"
-    output_path = name_with_date("has_trigger_9271_exist")
+    test2_path = "demo/event_extraction_data.json"
+    output_path = name_with_date("演示")
     predict_tool.joint_predict(
         filepath=test2_path,
         output=output_path,
-        # no_trigger=True,
-        # input_event_type=event_detection_path,
     )
