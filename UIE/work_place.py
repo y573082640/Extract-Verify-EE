@@ -35,7 +35,7 @@ datas = []
 with open(infer_path,"r") as fp:
     for line in fp:
         datas.append(json.loads(line))
-    samples = random.sample(datas,50)
+    samples = random.sample(datas,300)
 with open(demo_path,"a+") as fp:
     for sample in samples:
         json.dump(sample, fp, ensure_ascii=False, separators=(",", ":"))
