@@ -372,10 +372,7 @@ check_base = (
     "/home/ubuntu/PointerNet_Chinese_Information_Extraction/UIE/checkpoints/ee/"
 )
 ner_path = check_base + "ner_duee_roberta_no_lexicon_len256_bs32.pt"
-no_trigger_obj_path = (
-    check_base + "obj_duee_roberta_None_【论元抽取】多论元合并 No DEMO sample4.pt"
-)
-obj_path = check_base + "obj_duee_roberta_merge_noRandom_decode=0.5_512_32_sample1.pt"
+obj_path = check_base + "obj_duee_roberta_merge_noRandom_decode=0.5_512_32_sample1.pt" ##这个权重暂时被删掉了
 tri_path = check_base + "tri_duee_roberta_None_trigger_extraction_noneAug.pt"
 if __name__ == "__main__":
     ner_args = EeArgs(
